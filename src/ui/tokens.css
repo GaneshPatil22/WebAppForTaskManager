@@ -1,0 +1,43 @@
+/* Design tokens, carried over from BasicV1UI/Brain v1 prototype.html. */
+:root {
+  --bg: #F2F4FA; --surface: #FFFFFF; --surface2: #F6F7FC; --ink: #151932; --muted: #5E6586;
+  --line: #E1E5F1; --line-strong: #C3C9DE;
+  --accent: #4B49D6; --accent-soft: #E8E8FB; --on-fill: #FFFFFF;
+  --hero-bg: #2B2A92; --hero-ink: #FFFFFF; --hero-muted: #CBCCF6; --hero-btn: #FFD166; --hero-btn-ink: #2A1F00;
+  --daily: #0B8F7D; --daily-soft: #DDF3EF;
+  --weekly: #C23F77; --weekly-soft: #FBE3EC;
+  --monthly: #A86B00; --monthly-soft: #FBEBCB;
+  --wip: #8A5A00; --wip-soft: #FFF1D1; --wip-line: #F0D08A;
+  --danger: #C0392B; --danger-soft: #FBE4E1;
+  --shadow: 0 1px 2px rgba(21,25,50,.05), 0 10px 26px -14px rgba(21,25,50,.22);
+  --radius: 18px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D0F1F; --surface: #161933; --surface2: #1B1F3D; --ink: #ECEEFB; --muted: #9AA1C8;
+    --line: #272B4D; --line-strong: #3B4070;
+    --accent: #9593FF; --accent-soft: #25274F; --on-fill: #0D0F1F;
+    --hero-bg: #3836B5; --hero-muted: #D5D6FA;
+    --daily: #4FD6C0; --daily-soft: #143730;
+    --weekly: #FF86B5; --weekly-soft: #3C1A2C;
+    --monthly: #F4BE55; --monthly-soft: #3A2D0E;
+    --wip: #F4BE55; --wip-soft: #33280F; --wip-line: #5C4818;
+    --danger: #FF8A7A; --danger-soft: #3A1A17;
+    --shadow: 0 1px 0 rgba(255,255,255,.02);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D0F1F; --surface: #161933; --surface2: #1B1F3D; --ink: #ECEEFB; --muted: #9AA1C8;
+  --line: #272B4D; --line-strong: #3B4070;
+  --accent: #9593FF; --accent-soft: #25274F; --on-fill: #0D0F1F;
+  --hero-bg: #3836B5; --hero-muted: #D5D6FA;
+  --daily: #4FD6C0; --daily-soft: #143730;
+  --weekly: #FF86B5; --weekly-soft: #3C1A2C;
+  --monthly: #F4BE55; --monthly-soft: #3A2D0E;
+  --wip: #F4BE55; --wip-soft: #33280F; --wip-line: #5C4818;
+  --danger: #FF8A7A; --danger-soft: #3A1A17;
+  --shadow: 0 1px 0 rgba(255,255,255,.02);
+  color-scheme: dark;
+}

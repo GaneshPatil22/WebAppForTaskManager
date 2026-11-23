@@ -1,0 +1,18 @@
+# Manual trigger only: nothing runs on push or PR. See Brain ADR-0006.
+# Run from the Actions tab, or:  gh workflow run ci.yml
+name: CI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: make ci

@@ -1,0 +1,6 @@
+.dialog { border: 1px solid var(--line); border-radius: 22px; padding: 0; background: var(--surface); color: var(--ink); width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); box-shadow: 0 30px 80px -20px rgba(0,0,0,.45); }
+.wide { width: min(760px, calc(100vw - 32px)); }
+.dialog::backdrop { background: rgba(13,15,31,.45); }
+.body { padding: 20px 22px 22px; display: flex; flex-direction: column; gap: 16px; }
+.head { display: flex; align-items: center; gap: 12px; }
+.head h2 { flex: 1; font-size: 20px; font-weight: 700; letter-spacing: -.02em; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

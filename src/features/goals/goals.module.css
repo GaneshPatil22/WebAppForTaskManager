@@ -1,0 +1,10 @@
+.add { display: flex; gap: 8px; margin-bottom: 8px; }
+.row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 16px; background: var(--surface); }
+.icon { width: 38px; height: 38px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
+.title { font-weight: 600; overflow-wrap: anywhere; }
+.acts { display: flex; gap: 6px; align-items: center; }
+.rename { display: flex; gap: 6px; flex-wrap: wrap; }
+.rename :global(.input) { flex: 1; min-width: 160px; padding: 6px 10px; }
+.bar { width: 90px; height: 6px; border-radius: 99px; background: var(--surface2); border: 1px solid var(--line); overflow: hidden; display: inline-block; }
+.bar i { display: block; height: 100%; background: var(--daily); }
+@media (max-width: 600px) { .add { flex-direction: column; } .row { grid-template-columns: minmax(0, 1fr); } .icon { display: none; } }
