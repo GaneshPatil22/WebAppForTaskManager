@@ -77,3 +77,22 @@ screenshotted at 1360 px and 390 px, light and dark, with no console errors.
 **Not done:** real Supabase sign-in has never run, because there is no
 project yet (same as the server). http mode is covered only by unit tests of
 the client against a fake `fetch`.
+
+### 2026-11-24 — W1: the Supabase project exists
+
+Project `evhhbfrlkxtlgnhnsipf`. Checked from outside, with no credentials:
+its JWKS serves one **ES256 (P-256)** key, which is what ADR-0007 and the
+server's verifier expect, and `/auth/v1/settings` shows email sign-in on and
+**anonymous sign-ins off**, matching the server's refusal.
+
+The URL and publishable key live in `.env.local` (gitignored). The key is
+public by design, but it is still kept out of the repo so a rotation never
+needs a commit. `make dev` stays on the mock; `make dev-http` uses Supabase.
+
+In http mode the app loads supabase-js and shows the sign-in screen with no
+console errors. **Not yet done:** a real magic-link sign-in, which needs the
+redirect URLs added in the dashboard, and the server checking a real token
+end to end.
+
+The Supabase MCP in this environment belongs to a different account and
+can't see this project.
