@@ -144,3 +144,23 @@ the Mac's uid. The script now uses `COPYFILE_DISABLE=1`, `--no-xattrs`,
 
 **Supabase:** add `https://brain.corelearnly.com/**` to the redirect URLs, or
 magic links can't return to the site.
+
+### 2026-11-24 — W3: Continue with Google (written from the Server session)
+
+Sign-in offers Google first, then the email link. `signInWithOAuth({ provider:
+'google', redirectTo: window.location.origin })`, so it returns to localhost in
+dev and to the site in production. Both must be in Supabase's redirect URLs.
+
+**The server needs nothing.** A Google sign-in still yields a Supabase access
+token: same ES256 key, `aud: authenticated`, not anonymous. Supabase links a
+Google identity to an existing account with the same verified email
+(automatic identity linking, per its docs), so data isn't split per method.
+
+**Setup outside the code** (Supabase's "Sign in with Google" guide): a Google
+Cloud OAuth client of type Web application, with redirect URI = the project's
+callback (`https://rqxvzishfcthajxejvvn.supabase.co/auth/v1/callback`) and
+JavaScript origins = the site and localhost. Scopes `openid`, email, profile
+only. Sensitive scopes would trigger Google's slow verification.
+
+Verified: `make ci` (52 tests, build), and a screenshot of the production
+build's sign-in page with no console errors.

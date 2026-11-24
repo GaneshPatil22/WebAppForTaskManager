@@ -4,7 +4,9 @@ import type { Config } from '../config';
 
 /**
  * Who is signed in. Mock mode has a pretend user and no network. http mode
- * uses Supabase: email magic link, tokens refreshed by supabase-js. The
+ * uses Supabase: Google, or an email magic link; tokens refreshed by
+ * supabase-js. Both give the same kind of Supabase token, so the server
+ * needs nothing extra for Google. The
  * Brain server verifies those tokens itself (ADR-0007); anonymous sign-in
  * is refused there, so it is not offered here.
  */
@@ -19,6 +21,8 @@ export interface AuthService {
   subscribe(l: (s: AuthState) => void): () => void;
   current(): AuthState;
   sendMagicLink(email: string): Promise<void>;
+  /** Leaves the page for Google, then returns to this origin signed in. */
+  signInWithGoogle(): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -34,6 +38,7 @@ function mockAuth(): AuthService {
     subscribe: (l) => { l(state); return () => {}; },
     current: () => state,
     sendMagicLink: async () => {},
+    signInWithGoogle: async () => {},
     signOut: async () => {},
   };
 }
@@ -62,6 +67,12 @@ function supabaseAuth(url: string, key: string): AuthService {
     current: () => state,
     async sendMagicLink(email) {
       const { error } = await (await sbP).auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+      if (error) throw error;
+    },
+    async signInWithGoogle() {
+      // Back to whichever origin started it: localhost in dev, the site in
+      // production. Both must be in Supabase's redirect URLs.
+      const { error } = await (await sbP).auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
       if (error) throw error;
     },
     async signOut() { await (await sbP).auth.signOut(); },

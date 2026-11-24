@@ -9,6 +9,12 @@ export function SignInPage() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const google = async () => {
+    setBusy(true);
+    setError(null);
+    // On success the browser leaves for Google, so busy stays on.
+    try { await auth.signInWithGoogle(); } catch (err) { setError(err instanceof Error ? err.message : 'Couldn’t start Google sign-in.'); setBusy(false); }
+  };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -25,6 +31,8 @@ export function SignInPage() {
           <div className="banner info" style={{ marginTop: 18 }}>Check {email} for a sign-in link.</div>
         ) : (
           <form onSubmit={submit} className={styles.form}>
+            <button className="btn" type="button" onClick={google} disabled={busy}>Continue with Google</button>
+            <div className={styles.or}><span>or</span></div>
             <label className="field"><span>Email</span>
               <input className="input" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </label>
