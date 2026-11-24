@@ -1,6 +1,6 @@
 # Brain web app. `make ci` runs exactly what CI runs (Brain ADR-0006).
 .DEFAULT_GOAL := help
-.PHONY: help install dev dev-http build preview typecheck test e2e api ci clean
+.PHONY: help install dev dev-http build build-prod deploy preview typecheck test e2e api ci clean
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | \
@@ -17,6 +17,13 @@ dev-http: ## Run against the real server on 127.0.0.1:8080 (needs .env.local)
 
 build: ## Typecheck and build to dist/
 	npm run build
+
+build-prod: ## Production build for brain.corelearnly.com (needs .env.production.local)
+	@test -f .env.production.local || (echo "no .env.production.local: see DECISIONS.md, W2"; exit 1)
+	npx tsc --noEmit && npx vite build --mode production
+
+deploy: build-prod ## Build and deploy to the Oracle VM:  SSH_KEY=/path/to/key make deploy
+	./scripts/deploy-vm.sh
 
 preview: build ## Serve the production build
 	npx vite preview --host 127.0.0.1

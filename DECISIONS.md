@@ -120,3 +120,27 @@ key. No code changes.
 (Site URL and the redirect URLs `http://localhost:5173/**` and
 `http://127.0.0.1:5173/**`, plus the production address once it exists), and
 the test user. Users of the old project don't carry over.
+
+### 2026-11-24 — W2: production on the Oracle VM (written from the Server session)
+
+The website is served at **https://brain.corelearnly.com** by the VM's shared
+Caddy, from `~/n8n/site/brain` (Caddy sees it as `/srv/brain`). `/v1/*` on
+that same address is forwarded to the `brain-server` container, so the
+browser talks to one origin: **no CORS**, exactly like `make dev-http` with
+the Vite proxy. The API also has its own address, `brain-api.corelearnly.com`,
+for the mobile apps.
+
+**Build:** `make build-prod` reads `.env.production.local` (gitignored):
+`VITE_API_MODE=http`, an empty `VITE_API_BASE_URL` (same origin), and the
+Mumbai project's URL and publishable key. In Vite, `.env.[mode].local` beats
+`.env.local`, so `make dev` stays on the mock. Checked in the built bundle:
+mode `http`, base URL empty, the new project.
+
+**Deploy:** `SSH_KEY=… make deploy` builds, then `scripts/deploy-vm.sh` unpacks
+beside the live copy and swaps it in with two renames, so a visitor never gets
+a half-uploaded site. The first attempt shipped macOS `._*` metadata files and
+the Mac's uid. The script now uses `COPYFILE_DISABLE=1`, `--no-xattrs`,
+`--no-same-owner`, and sets root ownership.
+
+**Supabase:** add `https://brain.corelearnly.com/**` to the redirect URLs, or
+magic links can't return to the site.
