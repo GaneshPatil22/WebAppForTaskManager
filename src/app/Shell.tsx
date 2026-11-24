@@ -8,8 +8,9 @@ import { themeStore, effectiveDark, useApplyTheme } from './theme';
 import { prefsStore } from './prefs';
 import { ItemSheetProvider } from './itemSheet';
 import { CaptureComposer } from '../features/capture/CaptureComposer';
-import { TimerPill, TimerRunner } from '../features/timer/Timer';
+import { TimerDock, TimerPill, TimerRunner } from '../features/timer/Timer';
 import { RemindersRunner } from '../pwa/RemindersRunner';
+import { PlannedRunner } from '../features/today/PlannedRunner';
 import styles from './shell.module.css';
 
 interface NavDef { to: string; label: string; icon: IconKey }
@@ -77,6 +78,7 @@ export function Shell() {
               {g.items.map((n) => navLink(n))}
             </div>
           ))}
+          {prefs.timer ? <TimerDock variant="side" /> : null}
           <div className={styles.sideFoot}>{navLink({ to: '/settings', label: 'Settings', icon: 'settings' })}</div>
         </nav>
 
@@ -93,6 +95,7 @@ export function Shell() {
             <ThemeButton />
           </header>
           <SyncStrip />
+          {prefs.timer ? <TimerDock variant="strip" /> : null}
           <main className={styles.page}><Outlet /></main>
         </div>
 
@@ -116,6 +119,7 @@ export function Shell() {
       </Dialog>
       <TimerRunner />
       <RemindersRunner />
+      <PlannedRunner />
     </ItemSheetProvider>
   );
 }

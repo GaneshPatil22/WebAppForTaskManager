@@ -286,3 +286,29 @@ text as `t2`, as 0.9.0 would. Stored mock data migrates from v2 in place.
 
 Not built, as asked: delta sync, dependency "pending references", the five
 non-goals.
+
+### 2026-11-24 — W5, follow-ups from Ganesh's review
+
+- **Capture draft cleared on send.** The draft was cleared by an effect that
+  never ran, because the dialog unmounted the composer first; sent text came
+  back next time. Now cleared in the submit itself.
+- **Select arrows** are drawn inset (12px) instead of the native one flush to
+  the edge, for every `select.input`.
+- **Today's gap** between the big task and the ranked list no longer changes
+  with the tab: the side column spans both grid rows, so its extra height was
+  split between them; the second row is now `1fr` and takes it all.
+- **Add for tomorrow** (Plan tomorrow). There is no create-item endpoint, so
+  each entry is an ordinary capture through the outbox; the chosen day is kept
+  on the device by capture id (`local/planned.ts`) and set as the item's due
+  date, as the user's decision, once Brain has made the item
+  (`PlannedRunner`). Due means end of that day, 23:59:59 in the user's zone,
+  which is how Brain's DateParser reads a bare day (the mock now does too).
+  **Carry-over needs no code:** an open item past its day stays open, shows
+  "overdue by N days" from the day it was planned for, and Brain keeps
+  ranking it. The client never moves the due date itself: that would write a
+  fake "user" correction every night. The dialog lists what is due tomorrow
+  and what is carrying over, filtered from the server's items, not ranked.
+- **Timers listed, not "+1".** Every started timer (running or paused
+  part-way) gets a row with its clock, pause/resume and stop: in the sidebar
+  on wide screens, as chips pinned above the bottom bar on phones. The top-bar
+  button only opens the timer and shows a dot while any runs.

@@ -37,6 +37,7 @@
   .mock { display: none; }
   .strip { padding: 4px 16px 0; }
   .page { padding: 14px 16px 112px; }
+  .main:has([aria-label="Timers"]) .page { padding-bottom: 164px; }
   .bottom { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; align-items: center; justify-content: space-around; padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); background: var(--surface); }
   .bottom a, .moreBtn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; color: var(--muted); text-decoration: none; font-size: 11px; font-weight: 600; position: relative; background: none; border: 0; cursor: pointer; }
   .bottom a.on { color: var(--ink); }

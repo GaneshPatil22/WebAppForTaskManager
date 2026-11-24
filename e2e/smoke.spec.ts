@@ -118,3 +118,36 @@ test('a guessed size looks like a guess and is corrected in one tap', async ({ p
   await page.goto('/items');
   await expect(page.getByRole('button', { name: /Size: Large · half day, you set\. Change size of Call CA/ })).toBeVisible();
 });
+
+test('after capturing, the box opens empty next time', async ({ page }) => {
+  await page.getByRole('button', { name: 'Capture anything' }).click();
+  await page.getByLabel('Capture anything').last().fill('call the bank');
+  await page.getByRole('button', { name: 'Capture', exact: true }).click();
+  await expect(page.getByText(/Captured\./)).toBeVisible();
+  await page.getByRole('button', { name: 'Capture anything' }).click();
+  await expect(page.getByLabel('Capture anything').last()).toHaveValue('');
+  await page.reload();
+  await page.getByRole('button', { name: 'Capture anything' }).click();
+  await expect(page.getByLabel('Capture anything').last()).toHaveValue('');
+});
+
+test('plan tomorrow can add something, due tomorrow', async ({ page }) => {
+  await page.getByRole('button', { name: 'Plan tomorrow' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Add something for tomorrow').fill('Update LinkedIn profile');
+  await dialog.getByRole('button', { name: 'Add' }).click();
+  await expect(dialog.getByText('Update LinkedIn profile')).toBeVisible();
+  // Once Brain has made the item, tomorrow is set as its due date, as yours.
+  await expect(dialog.getByRole('button', { name: /Update LinkedIn profile/ }).getByText('due tomorrow')).toBeVisible({ timeout: 10_000 });
+});
+
+test('every running timer is listed with its own clock', async ({ page }) => {
+  await page.getByRole('button', { name: 'Open timer' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Start' }).click();
+  await page.keyboard.press('Escape');
+  await ranked(page).getByRole('button', { name: /^Focus on / }).first().click();
+  await page.keyboard.press('Escape');
+  const dock = page.getByRole('region', { name: 'Timers' }).first();
+  await expect(dock.getByRole('button', { name: /^Pause / })).toHaveCount(2);
+  await expect(page.getByText(/^\+\d$/)).toHaveCount(0);
+});

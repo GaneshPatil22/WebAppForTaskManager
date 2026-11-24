@@ -108,15 +108,16 @@ export function extract(raw: string, now: Date, tz: string): Extracted {
     }
   }
   if (day) {
-    let hour = 18;
+    // A bare day is due by its end, as Brain's DateParser reads it (23:59:59).
+    let hour = 23, minute = 59, second = 59;
     const t = /\b(\d{1,2})\s*(baje|am|pm)\b/i.exec(text);
     if (t) {
-      hour = +t[1]! % 12;
+      hour = +t[1]! % 12; minute = 0; second = 0;
       if (t[2]!.toLowerCase() === 'pm' || (t[2]!.toLowerCase() === 'baje' && hour < 7)) hour += 12;
-    } else if (/\bsubah\b|\bmorning\b/i.test(text)) hour = 9;
-    else if (/\bshaam\b|\bevening\b/i.test(text)) hour = 18;
+    } else if (/\bsubah\b|\bmorning\b/i.test(text)) { hour = 9; minute = 0; second = 0; }
+    else if (/\bshaam\b|\bevening\b/i.test(text)) { hour = 18; minute = 0; second = 0; }
     const [y, m, d] = day.split('-').map(Number);
-    dueAt = { value: zonedToInstant(y!, m!, d!, hour, 0, tz).toISOString(), confidence: 0.9, ...(ev ? { evidence: ev } : {}) };
+    dueAt = { value: new Date(zonedToInstant(y!, m!, d!, hour, minute, tz).getTime() + second * 1000).toISOString(), confidence: 0.9, ...(ev ? { evidence: ev } : {}) };
   }
 
   // ---- category ----

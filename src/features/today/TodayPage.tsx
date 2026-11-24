@@ -1,7 +1,12 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import type { Plan, ScheduledCommitment } from '../../api/types';
-import { useDailyPlans, useItemsById, useJournal, useOccurrences, usePlan, useCommitments } from '../../api/queries';
+import { useDailyPlans, useItems, useItemsById, useJournal, useOccurrences, usePlan, useCommitments, useToday } from '../../api/queries';
+import { useServices } from '../../app/services';
+import { useToast } from '../../ui/toast';
+import { MAX_CAPTURE_CHARS } from '../../outbox/outbox';
+import { planned, plannedStore } from '../../local/planned';
+import { ItemRow } from '../items/ItemRow';
 import { Icon } from '../../ui/Icon';
 import { Dialog } from '../../ui/Dialog';
 import { ProposalTag, QueryProblem, Skeleton } from '../../ui/components';
@@ -10,7 +15,7 @@ import { JournalEditor } from '../journal/JournalEditor';
 import { BigTask, Chooser } from './BigTask';
 import { Candidates } from './Candidates';
 import { TodayQuestion } from '../questions/Questions';
-import { addDaysToKey, fmtMinutes, longDay, type DayKey } from '../../domain/time';
+import { addDaysToKey, dayKey, fmtMinutes, longDay, type DayKey } from '../../domain/time';
 import styles from './today.module.css';
 
 /**
@@ -141,6 +146,7 @@ function PlanTomorrow({ plan }: { plan: Plan }) {
           </>
         ) : <p className="sub">Nothing scheduled.</p>}
       </section>
+      <AddForTomorrow today={plan.day} tomorrow={tomorrow} />
       <section>
         <h3 className={styles.dlgH}>Tomorrow’s big task</h3>
         {confirmed ? (
@@ -157,5 +163,67 @@ function PlanTomorrow({ plan }: { plan: Plan }) {
       </section>
       <Chooser open={choosing} onClose={() => setChoosing(false)} day={tomorrow} plan={plan} current={confirmed?.itemId} title="Choose tomorrow’s big task" />
     </div>
+  );
+}
+
+/**
+ * Add things for tomorrow. Each one is an ordinary capture (that is the only
+ * way in); the day is set as its due date once Brain has made the item
+ * (`PlannedRunner`). If it isn't done tomorrow it stays open, shows as
+ * overdue from that day, and keeps its place in Brain's ranking.
+ */
+function AddForTomorrow({ today, tomorrow }: { today: DayKey; tomorrow: DayKey }) {
+  const { outbox } = useServices();
+  const toast = useToast();
+  const items = useItems();
+  const { tz } = useToday();
+  const waiting = plannedStore.use().filter((e) => e.day === tomorrow);
+  const [text, setText] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Filters only, in the server's own order: nothing is ranked here.
+  const open = (items.data ?? []).filter((i) => i.status === 'open' && i.dueAt.value);
+  const dueTomorrow = open.filter((i) => dayKey(new Date(i.dueAt.value!), tz) === tomorrow);
+  const carrying = open.filter((i) => dayKey(new Date(i.dueAt.value!), tz) <= today);
+
+  async function add(e: FormEvent) {
+    e.preventDefault();
+    const t = text.trim();
+    if (!t || saving) return;
+    setSaving(true);
+    try {
+      const entry = await outbox.enqueue(t, 'text');
+      planned.add({ captureId: entry.id, day: tomorrow, text: t, addedOn: today });
+      setText('');
+      toast('Added for tomorrow.');
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <section>
+      <h3 className={styles.dlgH}>Add for tomorrow</h3>
+      <form className={styles.addRow} onSubmit={add}>
+        <input className="input" value={text} onChange={(e) => setText(e.target.value)} maxLength={MAX_CAPTURE_CHARS}
+          placeholder="Update LinkedIn profile" aria-label="Add something for tomorrow" />
+        <button className="btn primary" disabled={!text.trim() || saving}><Icon name="plus" size={14} />Add</button>
+      </form>
+      <p className="sub">Due tomorrow. If it isn’t done, it carries over as overdue from tomorrow and stays in Brain’s list.</p>
+      {waiting.length || dueTomorrow.length ? (
+        <div className={styles.tomorrowItems}>
+          {waiting.map((w) => (
+            <div key={w.captureId} className={styles.waitingRow}>
+              <span className="spin"><Icon name="refresh" size={12} /></span><span>{w.text}</span><span className="sub">Brain is organising this…</span>
+            </div>
+          ))}
+          {dueTomorrow.map((i) => <ItemRow key={i.id} item={i} />)}
+        </div>
+      ) : null}
+      {carrying.length ? (
+        <>
+          <p className={styles.carryHead}>Carrying over · {carrying.length} still open from earlier</p>
+          <div className={styles.tomorrowItems}>{carrying.map((i) => <ItemRow key={i.id} item={i} />)}</div>
+        </>
+      ) : null}
+    </section>
   );
 }

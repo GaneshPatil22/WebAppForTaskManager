@@ -41,6 +41,10 @@ export function CaptureComposer({ onDone, autoFocus = true, big = false, initial
     try {
       // In order, so captures keep the order they were written in.
       for (const p of parts) await outbox.enqueue(p, source);
+      // Cleared here, not by the effect below: onDone closes the dialog, and
+      // an unmounted composer never runs the effect, so the sent text would
+      // come back as a draft next time.
+      writeDraft('');
       setText('');
       toast(parts.length === 1 ? 'Captured. Brain is organising it.' : `Captured ${parts.length} things. Brain is organising them.`);
       onDone?.();

@@ -319,6 +319,7 @@ function optimistic(i: Item, u: ItemUpdate): Item {
     ...(u.type ? { type: mine(u.type) } : {}),
     ...(u.effort ? { effort: mine(u.effort) } : {}),
     ...(u.category ? { category: mine(u.category) } : {}),
+    ...(u.dueAt ? { dueAt: mine(u.dueAt) } : {}),
   };
 }
 

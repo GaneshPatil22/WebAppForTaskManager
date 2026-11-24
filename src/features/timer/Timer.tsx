@@ -4,7 +4,7 @@ import { Dialog } from '../../ui/Dialog';
 import { useToast } from '../../ui/toast';
 import {
   timer, timerStore, focusLogStore, secondsLeft, useTimerTick, completeDue, beep, isRunning, running, MODES,
-  type TimerMode,
+  type Countdown, type TimerMode, type TimerState,
 } from '../../local/timer';
 import { useToday, useUpdateItem } from '../../api/queries';
 import styles from './timer.module.css';
@@ -44,12 +44,14 @@ export function TimerRunner() {
   return null;
 }
 
+/**
+ * The top-bar button: opens the timer. It no longer carries the running
+ * clocks (a "+1" hid which ones); those are listed in the TimerDock.
+ */
 export function TimerPill() {
   const s = timerStore.use();
-  const now = useTimerTick();
   const [open, setOpen] = useState(false);
   const live = running(s);
-  const first = live[0];
   useEffect(() => {
     const show = () => setOpen(true);
     window.addEventListener('brain:timer', show);
@@ -57,15 +59,55 @@ export function TimerPill() {
   }, []);
   return (
     <>
-      <button type="button" className={`${styles.pill} ${first ? styles.live : ''}`}
-        onClick={() => { if (first) timer.view(first.mode); setOpen(true); }}
-        aria-label={first ? `${live.length} timer${live.length === 1 ? '' : 's'} running. ${first.c.label}, ${clock(secondsLeft(first.c, now))} left` : 'Open timer'}>
+      <button type="button" className={`${styles.pill} ${live.length ? styles.live : ''}`} onClick={() => setOpen(true)}
+        aria-label={live.length ? `Timer, ${live.length} running` : 'Open timer'} title="Timer">
         <Icon name="timer" size={15} />
-        {first ? <span className="tnum">{clock(secondsLeft(first.c, now))}</span> : null}
-        {live.length > 1 ? <span className={styles.more}>+{live.length - 1}</span> : null}
+        {live.length ? <span className={styles.dot} aria-hidden /> : null}
       </button>
       <Dialog open={open} onClose={() => setOpen(false)} title="Timer"><TimerBody /></Dialog>
     </>
+  );
+}
+
+/** Countdowns started and not finished: running, or paused part-way. */
+function active(s: TimerState): { mode: TimerMode; c: Countdown }[] {
+  return MODES.map((m) => ({ mode: m, c: s[m] }))
+    .filter(({ c }) => isRunning(c) || c.leftSec < c.totalSec);
+}
+
+/**
+ * Every timer you started, one row each, with its own clock and controls.
+ * In the sidebar on a wide screen, under the top bar on a phone. Nothing
+ * renders when no timer is going.
+ */
+export function TimerDock({ variant }: { variant: 'side' | 'strip' }) {
+  const s = timerStore.use();
+  const now = useTimerTick();
+  const rows = active(s);
+  if (!rows.length) return null;
+  const openOn = (m: TimerMode) => { timer.view(m); window.dispatchEvent(new Event('brain:timer')); };
+  return (
+    <section className={`${styles.dock} ${variant === 'side' ? styles.dockSide : styles.dockStrip}`} aria-label="Timers">
+      {variant === 'side' ? <div className={styles.dockTitle}>Timers</div> : null}
+      {rows.map(({ mode, c }) => {
+        const on = isRunning(c);
+        const left = secondsLeft(c, now);
+        return (
+          <div key={mode} className={`${styles.dockRow} ${on ? '' : styles.paused}`}>
+            <button type="button" className={styles.dockMain} onClick={() => openOn(mode)} title="Open timer">
+              <b className="tnum">{clock(left)}</b>
+              <span className={styles.dockLabel}>{c.label}</span>
+            </button>
+            <button type="button" className="icon-btn" aria-label={`${on ? 'Pause' : 'Resume'} ${c.label}`} onClick={() => (on ? timer.pause(mode) : timer.start(mode))}>
+              <Icon name={on ? 'pause' : 'play'} size={12} />
+            </button>
+            <button type="button" className="icon-btn" aria-label={`Stop ${c.label}`} onClick={() => timer.reset(mode)}>
+              <Icon name="close" size={13} />
+            </button>
+          </div>
+        );
+      })}
+    </section>
   );
 }
 

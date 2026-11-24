@@ -3,12 +3,15 @@
  * Right: what you committed to (teal, checkboxes), then the journal.
  * On a phone: big task, committed, ranked, journal.
  */
-.grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-areas: "big side" "ranked side"; gap: 8px 36px; align-items: start; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-areas: "big side" "ranked side"; grid-template-rows: auto 1fr; gap: 8px 36px; align-items: start; }
+/* The side column spans both rows. With `1fr` on the second row, its extra
+   height goes below the ranked list, never between the big task and it,
+   so switching tabs (lists of different lengths) cannot move the gap. */
 .areaBig { grid-area: big; }
 .areaRanked { grid-area: ranked; }
 .side { grid-area: side; display: flex; flex-direction: column; }
 @media (max-width: 1000px) {
-  .grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "big" "sched" "ranked" "journal"; gap: 8px; }
+  .grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "big" "sched" "ranked" "journal"; grid-template-rows: none; gap: 8px; }
   .side { display: contents; }
   .areaSched { grid-area: sched; margin-top: 18px; }
   .areaJournal { grid-area: journal; }
@@ -66,3 +69,9 @@
 .tomorrowList { display: flex; flex-direction: column; margin-top: 6px; }
 .tomorrowPick { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); }
 .bigSize { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.addRow { display: flex; gap: 8px; margin-bottom: 6px; }
+.addRow .input { flex: 1; }
+.tomorrowItems { margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; padding: 0 10px; background: var(--surface); }
+.waitingRow { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-top: 1px solid var(--line); font-size: 14.5px; flex-wrap: wrap; }
+.waitingRow:first-child { border-top: 0; }
+.carryHead { margin-top: 14px; font-size: 13px; font-weight: 600; color: var(--muted); }
