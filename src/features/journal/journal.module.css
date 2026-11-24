@@ -1,0 +1,13 @@
+.editor { display: flex; flex-direction: column; gap: 8px; }
+.area { min-height: 86px; font-size: 15px; }
+.entries { display: flex; flex-direction: column; }
+.entry { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 16px; padding: 16px 0; border-top: 1px solid var(--line); }
+.entry:first-child { border-top: 0; }
+.day { font-weight: 700; font-size: 14px; }
+.day small { display: block; color: var(--muted); font-weight: 500; font-size: 12.5px; }
+.body { white-space: pre-wrap; font-size: 15px; line-height: 1.6; }
+.bodyBtn { all: unset; cursor: pointer; display: block; white-space: pre-wrap; font-size: 15px; line-height: 1.6; border-radius: 8px; }
+.bodyBtn:hover { background: var(--surface2); }
+.bodyBtn:focus-visible { outline: 2px solid var(--rank); }
+.missing { color: var(--faint); font-size: 14px; }
+@media (max-width: 560px) { .entry { grid-template-columns: 1fr; gap: 6px; } }

@@ -1,10 +1,19 @@
-.add { display: flex; gap: 8px; margin-bottom: 8px; }
-.row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 16px; background: var(--surface); }
-.icon { width: 38px; height: 38px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; }
-.title { font-weight: 600; overflow-wrap: anywhere; }
-.acts { display: flex; gap: 6px; align-items: center; }
-.rename { display: flex; gap: 6px; flex-wrap: wrap; }
-.rename :global(.input) { flex: 1; min-width: 160px; padding: 6px 10px; }
-.bar { width: 90px; height: 6px; border-radius: 99px; background: var(--surface2); border: 1px solid var(--line); overflow: hidden; display: inline-block; }
-.bar i { display: block; height: 100%; background: var(--daily); }
-@media (max-width: 600px) { .add { flex-direction: column; } .row { grid-template-columns: minmax(0, 1fr); } .icon { display: none; } }
+.block { margin-bottom: 28px; padding-bottom: 8px; }
+.qHead { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.qh { font-size: 20px; font-weight: 750; letter-spacing: -.02em; display: flex; gap: 8px; align-items: center; }
+.months { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.month { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; background: var(--surface); }
+.month h3 { font-size: 14px; font-weight: 700; display: flex; gap: 6px; align-items: center; }
+@media (max-width: 860px) { .months { grid-template-columns: 1fr; } }
+.goals { display: flex; flex-direction: column; margin-top: 6px; }
+.goal { padding: 4px 0; }
+.goalRow { display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap; }
+.goalTitle { all: unset; cursor: pointer; font-weight: 650; font-size: 15px; }
+.goalTitle:hover { text-decoration: underline; text-underline-offset: 3px; }
+.goalTitle:focus-visible { outline: 2px solid var(--rank); border-radius: 4px; }
+.child { margin-left: 22px; padding-left: 12px; border-left: 2px solid var(--line); }
+.child .goalTitle { font-weight: 550; }
+.closed .goalTitle { color: var(--muted); }
+.past summary { cursor: pointer; font-weight: 600; color: var(--muted); padding: 8px 0; }
+.line { display: flex; gap: 8px; align-items: center; padding: 4px 0; flex-wrap: wrap; }
+.lineTitle { font-weight: 600; }

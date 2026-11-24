@@ -1,13 +1,12 @@
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; margin-bottom: 8px; align-items: start; }
-.cards:empty { display: none; }
-.head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin: 26px 0 10px; }
-.filters { display: flex; gap: 6px; flex-wrap: wrap; }
-.row { padding: 14px 16px; background: var(--surface); }
-.text { font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
-.items { margin-top: 10px; border-left: 2px solid var(--line); padding-left: 12px; display: flex; flex-direction: column; gap: 10px; }
-.items li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
-.closed { opacity: .6; }
-.ititle { all: unset; cursor: pointer; font-weight: 600; font-size: 14px; display: inline-flex; gap: 4px; align-items: center; overflow-wrap: anywhere; }
-.ititle:hover { color: var(--accent); }
-.iacts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-@media (max-width: 600px) { .items li { grid-template-columns: minmax(0, 1fr); } .iacts { justify-content: flex-start; } }
+.block { margin-bottom: 22px; }
+.list { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+.list > li + li { border-top: 1px solid var(--line); }
+.cap { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; }
+.capMeta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.became { all: unset; cursor: pointer; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; color: var(--muted); border-radius: 8px; }
+.became:hover .becameTitle { text-decoration: underline; }
+.became:focus-visible { outline: 2px solid var(--rank); }
+.becameTitle { color: var(--ink); font-weight: 600; }
+.suggest { padding: 12px 14px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; font-size: 14.5px; }
+.suggestActions { display: flex; gap: 6px; align-items: center; }

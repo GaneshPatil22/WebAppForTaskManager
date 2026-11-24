@@ -1,46 +1,43 @@
 import { useMemo, useState } from 'react';
-import { useItems } from '../../api/queries';
 import { ITEM_TYPES, type ItemStatus, type ItemType } from '../../api/types';
-import { TYPE_LABEL } from '../../domain/labels';
+import { useItems } from '../../api/queries';
 import { QueryProblem, Skeleton } from '../../ui/components';
+import { TYPE_LABEL } from '../../domain/labels';
 import { ItemRow } from './ItemRow';
 import styles from './items.module.css';
 
+/**
+ * Every item, open or closed, in the order they were captured (newest
+ * first). Not a ranking: Today has Brain's order. Filters only.
+ */
 export function ItemsPage() {
   const items = useItems();
-  const [status, setStatus] = useState<ItemStatus | 'all'>('open');
-  const [type, setType] = useState<ItemType | 'all' | 'unsure'>('all');
+  const [status, setStatus] = useState<ItemStatus>('open');
+  const [type, setType] = useState<ItemType | ''>('');
   const [q, setQ] = useState('');
-
-  const rows = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return (items.data ?? [])
-      .filter((i) => status === 'all' || i.status === status)
-      .filter((i) => type === 'all' || (type === 'unsure' ? !i.type.value : i.type.value === type))
-      .filter((i) => !needle || i.title.toLowerCase().includes(needle))
-      .sort((a, b) => b.id.localeCompare(a.id));
-  }, [items.data, status, type, q]);
+  const rows = useMemo(() => [...(items.data ?? [])].reverse().filter((i) =>
+    i.status === status && (!type || i.type.value === type) && (!q || i.title.toLowerCase().includes(q.toLowerCase())),
+  ), [items.data, status, type, q]);
+  const count = (s: ItemStatus) => (items.data ?? []).filter((i) => i.status === s).length;
 
   return (
     <>
-      <div className="vhead">
-        <div className="grow"><h1>All items</h1><p>Everything Brain has made from your captures. Open one to change what it decided.</p></div>
-      </div>
+      <div className="page-head"><div className="grow"><h1>All items</h1><p>Everything Brain made from your captures, newest first. Tap one to correct what Brain guessed.</p></div></div>
       <div className={styles.toolbar}>
-        <input className="input" placeholder="Search titles" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search" style={{ flex: 1, minWidth: 180 }} />
-        <select className="input" value={status} onChange={(e) => setStatus(e.target.value as ItemStatus | 'all')} aria-label="Status">
-          <option value="open">Open</option><option value="done">Done</option><option value="dropped">Dropped</option><option value="all">All statuses</option>
-        </select>
-        <select className="input" value={type} onChange={(e) => setType(e.target.value as ItemType | 'all' | 'unsure')} aria-label="Type">
-          <option value="all">All types</option>
+        <div className="seg" role="tablist" aria-label="Status">
+          {(['open', 'done', 'dropped'] as const).map((s) => (
+            <button key={s} role="tab" aria-selected={status === s} onClick={() => setStatus(s)}>{s[0]!.toUpperCase() + s.slice(1)} {items.data ? count(s) : ''}</button>
+          ))}
+        </div>
+        <select className="input" style={{ width: 'auto' }} value={type} onChange={(e) => setType(e.target.value as ItemType | '')} aria-label="Type">
+          <option value="">All types</option>
           {ITEM_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
-          <option value="unsure">Type not decided</option>
         </select>
+        <input className={`input ${styles.search}`} placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search items" />
       </div>
-      {items.error ? <QueryProblem error={items.error} what="items" onRetry={() => void items.refetch()} />
-        : items.isLoading ? <Skeleton rows={6} />
-        : rows.length ? <ul className="list">{rows.map((i) => <ItemRow key={i.id} item={i} />)}</ul>
-        : <ul className="list"><li className="empty">Nothing matches.</li></ul>}
+      {items.error ? <QueryProblem error={items.error} what="items" onRetry={() => void items.refetch()} /> : !items.data ? <Skeleton rows={6} /> : rows.length ? (
+        <div className="card" style={{ padding: '4px 16px' }}>{rows.map((i) => <ItemRow key={i.id} item={i} showType />)}</div>
+      ) : <p className="empty">Nothing here.</p>}
     </>
   );
 }

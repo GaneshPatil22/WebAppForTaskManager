@@ -1,0 +1,23 @@
+.today { margin-bottom: 18px; display: flex; flex-direction: column; gap: 6px; }
+.inbox { margin-bottom: 22px; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.card {
+  background: var(--proposal-soft); border: 1px dashed var(--proposal-line); border-radius: 14px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.head { display: flex; align-items: center; gap: 8px; }
+.tag { display: inline-flex; align-items: center; gap: 5px; color: var(--proposal); font-size: 12.5px; font-weight: 600; }
+.prompt { font-size: 15.5px; font-weight: 600; overflow-wrap: anywhere; }
+.options { display: flex; gap: 6px; flex-wrap: wrap; }
+.foot { font-size: 13px; color: var(--muted); }
+.more { font-size: 12.5px; color: var(--proposal); }
+/* Today: one line where it fits, so it never pushes the day down much. */
+.compact { padding: 9px 12px; gap: 6px; }
+.compact .prompt { font-size: 14.5px; }
+@media (min-width: 900px) {
+  .compact { display: grid; grid-template-columns: auto 1fr auto; align-items: center; column-gap: 14px; }
+  .compact .head { order: 0; }
+  .compact .prompt { order: 1; }
+  .compact .options { order: 2; }
+  .compact .head .grow { display: none; }
+}

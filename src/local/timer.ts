@@ -3,22 +3,36 @@ import { createLocalStore } from './store';
 import type { DayKey } from '../domain/time';
 
 /**
- * IN PROGRESS: timers (Brain backlog B-02) run on this device only. The end
- * time is stored, not a countdown, so a reload or a sleeping laptop does
- * not lose time. Focus minutes are logged per day for the Progress view;
- * later they are the measured-effort signal B-02 talks about.
+ * Timers (Brain backlog B-02) run on this device only.
+ *
+ * Three independent countdowns — focus, break and quick — that run in
+ * parallel. The tabs on the timer card only choose which one you are
+ * looking at; switching never stops or resets anything. So a 25-minute
+ * focus can run while a 10-minute "gas off" quick timer counts down.
+ *
+ * Each running countdown stores its end time, not a ticking number, so a
+ * reload or a sleeping laptop does not lose time. Focus minutes are logged
+ * per day for the Progress view.
  */
 export type TimerMode = 'focus' | 'break' | 'quick';
+export const MODES: readonly TimerMode[] = ['focus', 'break', 'quick'];
 
-export interface TimerState {
-  mode: TimerMode;
+export interface Countdown {
   label: string;
   itemId: string | null;
   totalSec: number;
-  /** Seconds left while paused; ignored while running. */
+  /** Seconds left while paused or stopped; ignored while running. */
   leftSec: number;
-  /** Epoch ms when it ends, while running. */
+  /** Epoch ms when it ends, while running; null otherwise. */
   endsAt: number | null;
+}
+
+export interface TimerState {
+  /** Which countdown the card shows. Purely a view choice. */
+  view: TimerMode;
+  focus: Countdown;
+  break: Countdown;
+  quick: Countdown;
 }
 
 export interface FocusLog {
@@ -28,76 +42,130 @@ export interface FocusLog {
 
 export const FOCUS_SEC = 25 * 60;
 export const BREAK_SEC = 5 * 60;
+const QUICK_DEFAULT_SEC = 10 * 60;
 
-const fresh = (mode: TimerMode = 'focus', totalSec = FOCUS_SEC, label = 'Focus'): TimerState =>
-  ({ mode, label, itemId: null, totalSec, leftSec: totalSec, endsAt: null });
+const countdown = (totalSec: number, label: string, itemId: string | null = null): Countdown =>
+  ({ label, itemId, totalSec, leftSec: totalSec, endsAt: null });
 
-export const timerStore = createLocalStore<TimerState>('brain-local-timer-v1', () => fresh());
+const freshFocus = () => countdown(FOCUS_SEC, 'Focus');
+const freshBreak = () => countdown(BREAK_SEC, 'Break');
+const freshQuick = () => countdown(QUICK_DEFAULT_SEC, 'Quick timer');
+
+const initial = (): TimerState => ({ view: 'focus', focus: freshFocus(), break: freshBreak(), quick: freshQuick() });
+
+// v2: the shape changed from one countdown to three, so old v1 state is ignored.
+export const timerStore = createLocalStore<TimerState>('brain-local-timer-v2', initial);
 export const focusLogStore = createLocalStore<FocusLog>('brain-local-focus-v1', () => ({ minutes: {}, sessions: {} }));
 
-export function secondsLeft(s: TimerState, now = Date.now()): number {
-  return s.endsAt === null ? s.leftSec : Math.max(0, Math.ceil((s.endsAt - now) / 1000));
+/** Seconds left, never more than the countdown's length (guards a stale `now`). */
+export function secondsLeft(c: Countdown, now = Date.now()): number {
+  if (c.endsAt === null) return c.leftSec;
+  return Math.min(c.totalSec, Math.max(0, Math.ceil((c.endsAt - now) / 1000)));
+}
+
+export const isRunning = (c: Countdown) => c.endsAt !== null;
+
+function update(mode: TimerMode, f: (c: Countdown) => Countdown) {
+  timerStore.set((s) => ({ ...s, [mode]: f(s[mode]) }));
 }
 
 export const timer = {
-  setMode(mode: TimerMode, quick?: { label: string; minutes: number; itemId?: string | null }) {
-    if (mode === 'focus') timerStore.set(fresh('focus', FOCUS_SEC, 'Focus'));
-    else if (mode === 'break') timerStore.set(fresh('break', BREAK_SEC, 'Break'));
-    else {
-      const minutes = Math.min(240, Math.max(1, Math.round(quick?.minutes ?? 10)));
-      timerStore.set({ ...fresh('quick', minutes * 60, quick?.label || 'Quick timer'), itemId: quick?.itemId ?? null });
-    }
+  view(mode: TimerMode) {
+    timerStore.set((s) => ({ ...s, view: mode }));
   },
-  start(now = Date.now()) {
-    timerStore.set((s) => {
-      const left = s.leftSec > 0 ? s.leftSec : s.totalSec;
-      return { ...s, leftSec: left, endsAt: now + left * 1000 };
+  start(mode: TimerMode, now = Date.now()) {
+    // Move the shared clock to this instant before anything renders, so the
+    // first frame after Start can't be computed against an old `now`.
+    tick.touch(now);
+    update(mode, (c) => {
+      const left = c.leftSec > 0 ? c.leftSec : c.totalSec;
+      return { ...c, leftSec: left, endsAt: now + left * 1000 };
     });
   },
-  pause(now = Date.now()) {
-    timerStore.set((s) => ({ ...s, leftSec: secondsLeft(s, now), endsAt: null }));
+  pause(mode: TimerMode, now = Date.now()) {
+    update(mode, (c) => ({ ...c, leftSec: secondsLeft(c, now), endsAt: null }));
   },
-  reset() {
-    timerStore.set((s) => ({ ...s, leftSec: s.totalSec, endsAt: null }));
+  reset(mode: TimerMode) {
+    update(mode, (c) => ({ ...c, leftSec: c.totalSec, endsAt: null }));
   },
-  /** Focus on an item: 25-min focus for longer work, a quick timer otherwise. */
+  /** Sets up the quick timer. Ignored while it runs, so typing can't disturb it. */
+  setQuick(label: string, minutes: number, itemId: string | null = null) {
+    update('quick', (c) => {
+      if (isRunning(c)) return c;
+      const m = Math.min(240, Math.max(1, Math.round(minutes || 1)));
+      return countdown(m * 60, label.trim() || 'Quick timer', itemId);
+    });
+  },
+  /** Focus on an item: 25-minute focus for longer work, a quick timer otherwise. */
   forItem(item: { id: string; title: string }, minutes: number, now = Date.now()) {
-    if (minutes >= 25) timerStore.set({ ...fresh('focus', FOCUS_SEC, `Focus: ${item.title}`), itemId: item.id });
-    else timer.setMode('quick', { label: item.title, minutes, itemId: item.id });
-    timer.start(now);
+    if (minutes >= 25) {
+      timerStore.set((s) => ({ ...s, view: 'focus', focus: countdown(FOCUS_SEC, `Focus: ${item.title}`, item.id) }));
+      timer.start('focus', now);
+    } else {
+      const m = Math.min(240, Math.max(1, Math.round(minutes)));
+      timerStore.set((s) => ({ ...s, view: 'quick', quick: countdown(m * 60, item.title, item.id) }));
+      timer.start('quick', now);
+    }
   },
 };
 
 export type FinishedEvent = { mode: TimerMode; label: string; itemId: string | null; minutes: number };
 
-/** Moves a finished timer on: focus → break → focus. Returns what finished. */
-export function completeIfDue(today: DayKey, now = Date.now()): FinishedEvent | null {
+/**
+ * Finishes every countdown whose time is up and returns what finished.
+ * Focus logs a session and readies a break; break readies a new focus;
+ * quick rewinds to its full length. Countdowns that are still running are
+ * left alone.
+ */
+export function completeDue(today: DayKey, now = Date.now()): FinishedEvent[] {
   const s = timerStore.get();
-  if (s.endsAt === null || secondsLeft(s, now) > 0) return null;
-  const done: FinishedEvent = { mode: s.mode, label: s.label, itemId: s.itemId, minutes: Math.round(s.totalSec / 60) };
-  if (s.mode === 'focus') {
+  const due = MODES.filter((m) => isRunning(s[m]) && secondsLeft(s[m], now) === 0);
+  if (!due.length) return [];
+  const next: TimerState = { ...s };
+  const done: FinishedEvent[] = [];
+  for (const m of due) {
+    const c = s[m];
+    done.push({ mode: m, label: c.label, itemId: c.itemId, minutes: Math.round(c.totalSec / 60) });
+    if (m === 'focus') {
+      next.focus = freshFocus();
+      if (!isRunning(s.break)) next.break = freshBreak();
+      if (s.view === 'focus') next.view = 'break';
+    } else if (m === 'break') {
+      next.break = freshBreak();
+      if (!isRunning(s.focus)) next.focus = freshFocus();
+      if (s.view === 'break') next.view = 'focus';
+    } else {
+      next.quick = { ...c, leftSec: c.totalSec, endsAt: null };
+    }
+  }
+  timerStore.set(next);
+  const focusDone = done.find((d) => d.mode === 'focus');
+  if (focusDone) {
     focusLogStore.set((l) => ({
-      minutes: { ...l.minutes, [today]: (l.minutes[today] ?? 0) + done.minutes },
+      minutes: { ...l.minutes, [today]: (l.minutes[today] ?? 0) + focusDone.minutes },
       sessions: { ...l.sessions, [today]: (l.sessions[today] ?? 0) + 1 },
     }));
-    timerStore.set(fresh('break', BREAK_SEC, 'Break'));
-  } else if (s.mode === 'break') {
-    timerStore.set(fresh());
-  } else {
-    timerStore.set({ ...s, leftSec: s.totalSec, endsAt: null });
   }
   return done;
 }
 
-/** Re-renders every 250 ms while a timer runs, and not at all otherwise. */
+/** Running countdowns, soonest to end first. */
+export function running(s: TimerState): { mode: TimerMode; c: Countdown }[] {
+  return MODES.filter((m) => isRunning(s[m]))
+    .map((m) => ({ mode: m, c: s[m] }))
+    .sort((a, b) => a.c.endsAt! - b.c.endsAt!);
+}
+
+/** Re-renders every 250 ms while any countdown runs, and not at all otherwise. */
 export function useTimerTick(): number {
   const s = timerStore.use();
   const now = useSyncExternalStore(tick.subscribe, tick.get, tick.get);
+  const anyRunning = MODES.some((m) => isRunning(s[m]));
   useEffect(() => {
-    if (s.endsAt === null) return;
+    if (!anyRunning) return;
     tick.start();
     return () => tick.stop();
-  }, [s.endsAt]);
+  }, [anyRunning]);
   return now;
 }
 
@@ -106,13 +174,17 @@ const tick = (() => {
   let iv: ReturnType<typeof setInterval> | null = null;
   let users = 0;
   const ls = new Set<() => void>();
+  const emit = () => { for (const l of ls) l(); };
   return {
     get: () => now,
     subscribe(l: () => void) { ls.add(l); return () => ls.delete(l); },
+    /** Jump the clock to a known instant (the moment a timer starts). */
+    touch(at = Date.now()) { now = at; emit(); },
     start() {
       users++;
+      now = Date.now();
       if (iv) return;
-      iv = setInterval(() => { now = Date.now(); for (const l of ls) l(); }, 250);
+      iv = setInterval(() => { now = Date.now(); emit(); }, 250);
     },
     stop() {
       users = Math.max(0, users - 1);

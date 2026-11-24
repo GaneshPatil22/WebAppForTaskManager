@@ -164,3 +164,125 @@ only. Sensitive scopes would trigger Google's slow verification.
 
 Verified: `make ci` (52 tests, build), and a screenshot of the production
 build's sign-in page with no console errors.
+
+### 2026-11-24 — W4: the UI rebuilt for the planner (Brain 0.7.0)
+
+The v1 interface was a stand-in for a product that has since gained a second
+half: commitments, periods, reviews and the journal (`Brain/docs/15-planner.md`).
+It was rebuilt from the data and the brief, not extended. **Kept:** the outbox,
+`domain/time.ts`, auth, the HTTP client, the generated schema (regenerated for
+the planner API), the local timer. **Replaced:** every screen, the shell, the
+design tokens, the mock server's behaviour. The v1 code is in git history (W3).
+
+**The one idea: commitments are scheduled, candidates are ranked.** Three
+colours carry meaning and nothing else gets one: teal for scheduled (a
+checkbox, no number), indigo for Brain's ranking (numbered, in server order),
+amber and dashed for anything Brain proposes or guesses. Today puts them in
+separate places: the big task, then *Ranked by Brain* on the left; *Committed*
+on the right. On a phone: big task, committed, ranked, journal.
+
+**The big task is the hinge.** Until confirmed it renders as a proposal
+("Brain proposes · not confirmed"). *Choose another* lists `ranked` in server
+order; any pick sends `proposedItemId` = the plan's `next` as shown and
+`itemId` = the pick, so the server records a swap. *Plan tomorrow* does the
+same for tomorrow (the evening ritual). The ranked list hides the big task's
+row rather than showing it twice, and keeps Brain's numbers, so a gap is
+visible rather than renumbered.
+
+**Screens:** Today, Week (Mon–Sun; daily habits as one line per day), Month
+(goals for the month and quarter, then dated commitments on a grid), Review
+(week / month / quarter from `/v1/review`), Journal, Goals (quarter with its
+month goals nested; `invalid_rollup` explained), Commitments (the five rule
+shapes as a form), Inbox, All items, Settings, and /capture.
+
+**Capture takes a dump.** A textarea, not a line. Brain makes one item per
+capture, so a pasted list would become one item: when the text has several
+lines, *One capture per line* is offered (on by default, off for shared
+content). It splits only on line breaks the user typed and strips list
+bullets; it never interprets text. The unsent draft is kept in localStorage.
+
+**Questions and link suggestions are invisible when empty.** `/v1/questions`
+is always `[]` on the server; the inbox renders a section only when there is
+something in it. The real pipeline proposes only `blocks` links from phrases
+like "after X", so that is all the mock proposes.
+
+**The mock was made honest.** It no longer asks questions, suggests duplicates
+or relates-links, or assigns goals to items, none of which the server does. It
+gained the planner, ported from the server and Brain rather than invented:
+recurrence (`mock/recurrence.ts`, a port of `Commitment.swift`), the plan's
+commitments section and `committedMinutes`, occurrence rules (`not_scheduled`,
+`in_future`, `invalid_move`, done-after-move counts for the original day),
+92-day ranges, daily plans with swap corrections, review counts, goal periods
+and rollup, journal. The seed is the brief's own commitments and no goals.
+Storage key bumped to `brain-mock-db-v2`.
+
+**The 1-3-5 board** is now a display option (Settings → Today, off by
+default) for the ranked list. Nothing else reads it.
+
+**Timezone bug fixed.** V8 lists `Asia/Calcutta`, not `Asia/Kolkata`, so the
+select matched no option and showed "Africa/Abidjan". The user's zone is now
+always an option (`settings/timezones.ts`, tested).
+
+**PWA.** `manifest.webmanifest` (standalone, Capture shortcut, Android share
+target to /capture) and a service worker generated at build time
+(`pwa/swSource.ts`, emitted by a 20-line plugin in `vite.config.ts`, no
+dependency). It precaches exactly the built files, serves the shell offline,
+caches hashed assets, and never touches `/v1`. Installed and offline, the app
+opens and capture works, because the outbox writes to IndexedDB first.
+Verified against a production build with the network off.
+
+**Reminders, honestly scoped.** No push server exists, so reminders are local:
+the page turns the next 7 days of `/v1/occurrences` into a small digest
+(a morning note per day; a heads-up the evening before a payment) and stores
+it in IndexedDB. The page fires due ones while open; the service worker fires
+them on Periodic Background Sync where Chrome allows it (installed app only,
+the browser decides how often). Settings says exactly this. Real "rent on the
+4th at 9am, app closed" needs Web Push from the server: a later step.
+
+**Hosting note.** Browsers revalidate `/sw.js` at least daily regardless of
+headers, so the current Caddy config works. Optional:
+`header /sw.js Cache-Control "no-cache"` in the site block makes updates
+immediate.
+
+### 2026-11-24 — W5: questions, size guesses, error codes (Server 425785b, Brain 0.9.0)
+
+Built on W4, which already used the full planner API. The spec's only change
+since W4's generation was the Question schema (`itemId` and `createdAt` now
+required). What this step adds:
+
+**Error codes in one place.** `domain/errors.ts` maps every code the server
+sends (from `Server/Sources/App`) to a sentence a person can act on;
+`errorText` uses it and falls back to the server's message for a code it
+doesn't know. The goal page's one-off rollup message is gone.
+
+**Questions (S6b).** A compact, hideable "Brain has a question" card on Today
+(one at a time, "+N more" links to Inbox) and the full list in Inbox. Options
+are the server's, one button each, no free text. An answer leaves the list at
+once and shows on the item as yours; 409 `already_answered` says to edit the
+item and offers to open it; 404 just drops it. Editing an item's type also
+drops its question, as the server closes it in the same edit. Hiding is
+device-only and never answers anything. An item with an open question works
+normally; an unknown type is never an error.
+
+**Model guesses look like guesses (Brain 0.9.0).** Size is now a chip on every
+open item row and on the big task, changed in one tap (tap, pick). A model's
+size (`t1`/`t2`, median confidence about 0.39) is lighter, dashed and says
+"guess"; a rule's size (`t0`, read from a duration you wrote) is marked but
+without the word; yours is solid. Each change is sent as your decision, so the
+server records it as a correction. The edit shows at once in the item list and
+in the plan's copies; Brain's order changes only when the plan is refetched,
+because the client never re-ranks. The editor's "Effort" is now "Size".
+
+**Mock kept honest, again.** W4 believed the server made no questions and no
+duplicate suggestions. With 0.9.0 it makes both, so the mock now ports them:
+`typeQuestion` (prompt, all five types as options) when its rules can't read
+the type, answer semantics exactly as `UserStore+Questions.swift` (204 again
+for the same option, 400 `not_an_option`, 409 `already_answered`, `t3`
+correction, closed by a type edit only if the new type is one of the options),
+and `TitleMatcher.bestDuplicate` (plain overlap ≥ 0.7, URLs compared whole, at
+most one). Known difference: the mock has no model, so it asks whenever its
+rules abstain; production asks less. The seed marks sizes not stated in the
+text as `t2`, as 0.9.0 would. Stored mock data migrates from v2 in place.
+
+Not built, as asked: delta sync, dependency "pending references", the five
+non-goals.

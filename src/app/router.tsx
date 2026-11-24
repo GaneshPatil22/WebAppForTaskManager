@@ -1,48 +1,36 @@
 import { createRootRoute, createRoute, createRouter, Link } from '@tanstack/react-router';
+import type { ReactElement } from 'react';
 import { Shell } from './Shell';
 import { TodayPage } from '../features/today/TodayPage';
+import { CapturePage } from '../features/capture/CapturePage';
+import { WeekPage } from '../features/calendar/WeekPage';
+import { MonthPage } from '../features/calendar/MonthPage';
+import { ReviewPage } from '../features/review/ReviewPage';
+import { JournalPage } from '../features/journal/JournalPage';
+import { GoalsPage } from '../features/goals/GoalsPage';
+import { CommitmentsPage } from '../features/commitments/CommitmentsPage';
 import { InboxPage } from '../features/inbox/InboxPage';
 import { ItemsPage } from '../features/items/ItemsPage';
-import { GoalsPage } from '../features/goals/GoalsPage';
-import { WeekPage } from '../features/week/WeekPage';
-import { RepeatsPage } from '../features/repeats/RepeatsPage';
-import { ProgressPage } from '../features/progress/ProgressPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
-import { isOn, viewPrefsStore, VIEWS, type ViewId } from '../domain/views';
-import type { ReactElement } from 'react';
-
-type Page = () => ReactElement;
-
-/** A view the user switched off still has a URL; it explains itself instead of 404ing. */
-function gated(id: ViewId, Page: Page): Page {
-  return function Gated() {
-    const prefs = viewPrefsStore.use();
-    if (isOn(prefs, id)) return <Page />;
-    const v = VIEWS.find((x) => x.id === id)!;
-    return (
-      <div className="vhead"><div className="grow">
-        <h1>{v.title} is switched off</h1>
-        <p>You can turn it back on in <Link to="/settings">Settings</Link>.</p>
-      </div></div>
-    );
-  };
-}
 
 const root = createRootRoute({
   component: Shell,
   notFoundComponent: () => (
-    <div className="vhead"><div className="grow"><h1>Not found</h1><p><Link to="/">Back to today</Link></p></div></div>
+    <div className="page-head"><div className="grow"><h1>Not found</h1><p><Link to="/">Back to today</Link></p></div></div>
   ),
 });
 
-const pages: [string, Page][] = [
+const pages: [string, () => ReactElement][] = [
   ['/', TodayPage],
+  ['/capture', CapturePage],
+  ['/week', WeekPage],
+  ['/month', MonthPage],
+  ['/review', ReviewPage],
+  ['/journal', JournalPage],
+  ['/goals', GoalsPage],
+  ['/commitments', CommitmentsPage],
   ['/inbox', InboxPage],
-  ['/items', gated('items', ItemsPage)],
-  ['/goals', gated('goals', GoalsPage)],
-  ['/week', gated('week', WeekPage)],
-  ['/repeats', gated('repeats', RepeatsPage)],
-  ['/progress', gated('progress', ProgressPage)],
+  ['/items', ItemsPage],
   ['/settings', SettingsPage],
 ];
 

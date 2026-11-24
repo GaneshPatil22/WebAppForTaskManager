@@ -116,7 +116,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** All goals. (S3) */
+        /** All goals, or one month's or quarter's. (S3, P4) */
         get: operations["listGoals"];
         put?: never;
         /** Goals are only ever created by the user, never invented. (S3) */
@@ -140,7 +140,13 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Rename a goal or change its status. (S3) */
+        /**
+         * Rename a goal, change its status, period or parent. (S3, P4)
+         * @description A month goal may name a quarter goal as its parent only if that
+         *     quarter contains the month; anything else is 400 `invalid_rollup`.
+         *     Changing a quarter's period is refused the same way if a month goal
+         *     rolling up into it would no longer fit.
+         */
         patch: operations["updateGoal"];
         trace?: never;
     };
@@ -159,8 +165,213 @@ export interface paths {
          *     `next` is the top item that can be started now, and is absent when
          *     nothing can. A blocked item may still rank first in `ranked`, with
          *     its blockers listed in `blocked`.
+         *
+         *     `commitments` is today's standing commitments, a **separate section**:
+         *     commitments are scheduled, never ranked, and never appear in
+         *     `ranked`. `day` is today in the user's timezone. `committedMinutes`
+         *     is what is still owed to them today; nothing subtracts it for you.
+         *     `bigTask` is today's confirmed big task, if the user confirmed one.
          */
         get: operations["getPlan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/commitments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The user's commitments (habits, rituals, payments, blocks). (P4)
+         * @description Archived (deleted) ones are left out.
+         */
+        get: operations["listCommitments"];
+        put?: never;
+        /**
+         * Commit to something that recurs. (P4)
+         * @description Commitments are not items: they are scheduled, never ranked. Only the
+         *     rule is stored; the days it falls on are worked out when asked for.
+         *     `note` is free text such as "22k" and is never parsed or added up.
+         */
+        post: operations["createCommitment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/commitments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One commitment. (P4) */
+        get: operations["getCommitment"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a commitment. Its history stays for the reviews. (P4)
+         * @description The commitment disappears from lists and the plan and ends today; the
+         *     days it was done stay, so past reviews do not change.
+         */
+        delete: operations["deleteCommitment"];
+        options?: never;
+        head?: never;
+        /** Change a commitment. Only the fields sent change. (P4) */
+        patch: operations["updateCommitment"];
+        trace?: never;
+    };
+    "/v1/commitments/{id}/occurrences/{day}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Mark one day of a commitment done, skipped or moved. (P4)
+         * @description `day` is a day the commitment falls on (400 `not_scheduled`
+         *     otherwise). Done is refused for a day that has not come yet
+         *     (400 `in_future`). Moving needs `movedTo`; the occurrence then shows
+         *     on that day, and marking it done later counts for the original day.
+         *     There is no "missed": a day left alone is a miss once it has passed.
+         */
+        put: operations["setOccurrence"];
+        post?: never;
+        /** Undo. The day goes back to having no state. (P4) */
+        delete: operations["clearOccurrence"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/occurrences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every day each commitment falls on in a range, with its state. (P4)
+         * @description Worked out on request from the rules; at most 92 days. An occurrence
+         *     moved into the range from outside it is included; place each one on
+         *     `movedTo` if present, otherwise on `day`.
+         */
+        get: operations["listOccurrences"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/journal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Journal entries in a range, oldest first. At most 92 days. (P4) */
+        get: operations["listJournal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/journal/{day}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Write the day's entry, replacing any earlier text. (P4)
+         * @description One entry per day. Not an item. A day that has not come yet is 400 `in_future`.
+         */
+        put: operations["writeJournal"];
+        post?: never;
+        /** Delete the day's entry. (P4) */
+        delete: operations["deleteJournal"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/daily-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Confirmed big tasks in a range. At most 92 days. (P4) */
+        get: operations["listDailyPlans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/daily-plans/{day}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Confirm the day's big task. Choosing another than Brain's is a swap. (P4)
+         * @description Send the item Brain proposed (the plan's `next` as shown) as
+         *     `proposedItemId`. If `itemId` differs, the swap is recorded as a
+         *     correction: it is what teaches the ranking. `day` may be yesterday,
+         *     today or tomorrow (the evening planning ritual), else 400
+         *     `day_out_of_range`. The item must be open (400 `item_not_open`).
+         */
+        put: operations["confirmDailyPlan"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How a week, month or quarter went. At most 92 days. (P4)
+         * @description Per commitment: days expected, done, skipped, moved and not yet done,
+         *     missed, the hit rate and the current streak. Goals whose month or
+         *     quarter overlaps the range, each with the month goals rolling up into
+         *     it. Counts of journal entries and confirmed big tasks, and how many
+         *     were swaps. No amounts are ever added up.
+         */
+        get: operations["getReview"];
         put?: never;
         post?: never;
         delete?: never;
@@ -231,7 +442,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Questions Brain asks instead of guessing (tier T3). (S4) */
+        /**
+         * Questions Brain asks instead of guessing (tier T3).
+         * @description This user's unanswered questions, newest first, at most 50.
+         */
         get: operations["listQuestions"];
         put?: never;
         post?: never;
@@ -250,7 +464,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Answer with one of the offered options. (S4) */
+        /**
+         * Answer with one of the offered options.
+         * @description Sets the item's field as the user's decision and records a `t3` correction. Answering again with the same option changes nothing. 400 `not_an_option` if the option is not one of the question's own; 409 `already_answered` if it was answered with a different option (edit the item instead).
+         */
         post: operations["answerQuestion"];
         delete?: never;
         options?: never;
@@ -403,10 +620,16 @@ export interface components {
         NewGoal: {
             id: components["schemas"]["ULID"];
             title: string;
+            period?: components["schemas"]["Period"];
+            parentId?: components["schemas"]["ULID"];
         };
         GoalUpdate: {
             title?: string;
             status?: components["schemas"]["GoalStatus"];
+            period?: components["schemas"]["Period"];
+            parentId?: components["schemas"]["ULID"];
+            /** @description Fields to remove. A field may not be both sent and cleared. */
+            clear?: ("period" | "parentId")[];
         };
         Goal: {
             id: components["schemas"]["ULID"];
@@ -414,6 +637,10 @@ export interface components {
             status: components["schemas"]["GoalStatus"];
             /** Format: date-time */
             createdAt: string;
+            period?: components["schemas"]["Period"];
+            /** @description For display, e.g. "November 2026", "Q4 2026". */
+            periodText?: string;
+            parentId?: components["schemas"]["ULID"];
         };
         GoalList: {
             goals: components["schemas"]["Goal"][];
@@ -477,21 +704,198 @@ export interface components {
             blocked: components["schemas"]["BlockedItem"][];
             /** Format: date-time */
             computedAt: string;
+            day: components["schemas"]["Day"];
+            commitments: components["schemas"]["ScheduledCommitment"][];
+            committedMinutes: number;
+            bigTask?: components["schemas"]["DailyPlan"];
+        };
+        /**
+         * @description One commitment on the plan's day. Payments and rituals first, then
+         *     blocks, then habits. `state` absent means nothing recorded yet.
+         *     `movedFrom` is set when it was moved here from another day (mark it
+         *     with that day); `movedTo` when it was moved away from today.
+         */
+        ScheduledCommitment: {
+            commitment: components["schemas"]["Commitment"];
+            state?: components["schemas"]["OccurrenceState"];
+            movedFrom?: components["schemas"]["Day"];
+            movedTo?: components["schemas"]["Day"];
+        };
+        /**
+         * @description A calendar day, `YYYY-MM-DD`, in the user's timezone.
+         * @example 2026-11-24
+         */
+        Day: string;
+        /**
+         * @description A month (`2026-11`) or a calendar quarter (`2026-Q4`; Q1 is January to March).
+         * @example 2026-Q4
+         */
+        Period: string;
+        /**
+         * @description `habit` read 10 pages · `ritual` Sunday review · `payment` rent on the 4th · `block` Friday 3h office block.
+         * @enum {string}
+         */
+        CommitmentKind: "habit" | "ritual" | "payment" | "block";
+        /** @enum {string} */
+        Weekday: "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday";
+        /**
+         * @description One of five shapes, and only the fields that shape uses (400
+         *     `invalid_rule` otherwise):
+         *     `daily` · `weeklyOn` + weekday · `monthlyOnDay` + day (1–31; the 31st
+         *     falls on the month's last day when shorter) · `monthlyOnNthWeekday` +
+         *     n (1–5) + weekday · `quarterlyOnNthWeekday` + n + weekday (in January,
+         *     April, July, October). A fifth weekday skips months that have none.
+         */
+        Rule: {
+            /** @enum {string} */
+            kind: "daily" | "weeklyOn" | "monthlyOnDay" | "monthlyOnNthWeekday" | "quarterlyOnNthWeekday";
+            weekday?: components["schemas"]["Weekday"];
+            day?: number;
+            n?: number;
+        };
+        NewCommitment: {
+            id: components["schemas"]["ULID"];
+            title: string;
+            kind: components["schemas"]["CommitmentKind"];
+            rule: components["schemas"]["Rule"];
+            /** @description The time it takes, as the user states it. */
+            minutes: number;
+            category?: components["schemas"]["Category"];
+            goalId?: components["schemas"]["ULID"];
+            startOn?: components["schemas"]["Day"];
+            endOn?: components["schemas"]["Day"];
+            /** @default false */
+            paused: boolean;
+            /** @description Free text, e.g. "22k". Never parsed, never added up. */
+            note?: string;
+        };
+        CommitmentUpdate: {
+            title?: string;
+            kind?: components["schemas"]["CommitmentKind"];
+            rule?: components["schemas"]["Rule"];
+            minutes?: number;
+            category?: components["schemas"]["Category"];
+            goalId?: components["schemas"]["ULID"];
+            startOn?: components["schemas"]["Day"];
+            endOn?: components["schemas"]["Day"];
+            paused?: boolean;
+            note?: string;
+            /** @description Fields to remove. A field may not be both sent and cleared. */
+            clear?: ("category" | "goalId" | "endOn" | "note")[];
+        };
+        Commitment: {
+            id: components["schemas"]["ULID"];
+            title: string;
+            kind: components["schemas"]["CommitmentKind"];
+            rule: components["schemas"]["Rule"];
+            /** @example Every Friday */
+            ruleText: string;
+            minutes: number;
+            category?: components["schemas"]["Category"];
+            goalId?: components["schemas"]["ULID"];
+            startOn: components["schemas"]["Day"];
+            endOn?: components["schemas"]["Day"];
+            paused: boolean;
+            note?: string;
+            /** @description Consecutive done occurrences up to today. Today not yet done does not break it. */
+            streak: number;
+            nextOn?: components["schemas"]["Day"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CommitmentList: {
+            commitments: components["schemas"]["Commitment"][];
+        };
+        /** @enum {string} */
+        OccurrenceState: "done" | "skipped" | "moved";
+        OccurrenceUpdate: {
+            state: components["schemas"]["OccurrenceState"];
+            movedTo?: components["schemas"]["Day"];
+        };
+        Occurrence: {
+            commitmentId: components["schemas"]["ULID"];
+            day: components["schemas"]["Day"];
+            state?: components["schemas"]["OccurrenceState"];
+            movedTo?: components["schemas"]["Day"];
+        };
+        OccurrenceList: {
+            occurrences: components["schemas"]["Occurrence"][];
+        };
+        JournalWrite: {
+            body: string;
+        };
+        JournalEntry: {
+            day: components["schemas"]["Day"];
+            body: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        JournalList: {
+            entries: components["schemas"]["JournalEntry"][];
+        };
+        DailyPlanConfirm: {
+            itemId: components["schemas"]["ULID"];
+            proposedItemId?: components["schemas"]["ULID"];
+        };
+        DailyPlan: {
+            day: components["schemas"]["Day"];
+            itemId: components["schemas"]["ULID"];
+            proposedItemId?: components["schemas"]["ULID"];
+            swapped: boolean;
+            /** Format: date-time */
+            confirmedAt: string;
+        };
+        DailyPlanList: {
+            plans: components["schemas"]["DailyPlan"][];
+        };
+        CommitmentReview: {
+            commitment: components["schemas"]["Commitment"];
+            /** @description Days in the range it fell on. */
+            expected: number;
+            done: number;
+            skipped: number;
+            /** @description Moved to a day that has not passed yet. */
+            moved: number;
+            /** @description Passed with nothing recorded, or moved to a day that passed undone. */
+            missed: number;
+            /** @description Done over expected. Absent when nothing was expected. */
+            hitRate?: number;
+            streak: number;
+        };
+        GoalReview: {
+            goal: components["schemas"]["Goal"];
+            /** @description Month goals rolling up into this quarter goal. */
+            children: components["schemas"]["Goal"][];
+        };
+        Review: {
+            from: components["schemas"]["Day"];
+            through: components["schemas"]["Day"];
+            commitments: components["schemas"]["CommitmentReview"][];
+            goals: components["schemas"]["GoalReview"][];
+            journalEntries: number;
+            bigTasksConfirmed: number;
+            bigTasksSwapped: number;
         };
         Question: {
             id: components["schemas"]["ULID"];
             captureId: components["schemas"]["ULID"];
-            itemId?: components["schemas"]["ULID"];
+            itemId: components["schemas"]["ULID"];
             /** @description What the answer sets, e.g. `type`. */
             field: string;
             prompt: string;
             options: string[];
+            /** Format: date-time */
+            createdAt: string;
         };
         QuestionList: {
             questions: components["schemas"]["Question"][];
         };
         Answer: {
-            /** @description One of the question's `options` */
+            /** @description One of the question's `options`, exactly. */
             option: string;
         };
     };
@@ -513,6 +917,10 @@ export interface components {
         Id: components["schemas"]["ULID"];
         /** @description Return rows after this id. Use `nextCursor` from the previous page. */
         After: components["schemas"]["ULID"];
+        Day: components["schemas"]["Day"];
+        From: components["schemas"]["Day"];
+        /** @description Inclusive. */
+        Through: components["schemas"]["Day"];
         Limit: number;
     };
     requestBodies: never;
@@ -728,7 +1136,10 @@ export interface operations {
     };
     listGoals: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Only goals of this period, e.g. `2026-11` or `2026-Q4`. */
+                period?: components["schemas"]["Period"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -824,6 +1235,357 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Plan"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listCommitments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createCommitment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewCommitment"];
+            };
+        };
+        responses: {
+            /** @description Already created with this id. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Commitment"];
+                };
+            };
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Commitment"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getCommitment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Commitment"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteCommitment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateCommitment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommitmentUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Commitment"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    setOccurrence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+                day: components["parameters"]["Day"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OccurrenceUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Occurrence"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    clearOccurrence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+                day: components["parameters"]["Day"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cleared, or there was nothing to clear. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listOccurrences: {
+        parameters: {
+            query: {
+                from: components["parameters"]["From"];
+                /** @description Inclusive. */
+                through: components["parameters"]["Through"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OccurrenceList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listJournal: {
+        parameters: {
+            query: {
+                from: components["parameters"]["From"];
+                /** @description Inclusive. */
+                through: components["parameters"]["Through"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    writeJournal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                day: components["parameters"]["Day"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JournalWrite"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalEntry"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteJournal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                day: components["parameters"]["Day"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted, or there was none. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listDailyPlans: {
+        parameters: {
+            query: {
+                from: components["parameters"]["From"];
+                /** @description Inclusive. */
+                through: components["parameters"]["Through"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DailyPlanList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    confirmDailyPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                day: components["parameters"]["Day"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DailyPlanConfirm"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DailyPlan"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getReview: {
+        parameters: {
+            query: {
+                from: components["parameters"]["From"];
+                /** @description Inclusive. */
+                through: components["parameters"]["Through"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Review"];
                 };
             };
             default: components["responses"]["Problem"];

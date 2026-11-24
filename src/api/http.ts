@@ -1,6 +1,6 @@
 import createClient from 'openapi-fetch';
 import type { paths } from './schema.gen';
-import { ApiError, type BrainClient } from './client';
+import { ApiError, type BrainClient, type DayRange } from './client';
 import type { Problem } from './types';
 
 /** Returns the current access token, or null when signed out. */
@@ -70,8 +70,8 @@ export class HttpBrainClient implements BrainClient {
     return (await this.run(() => this.api.PATCH('/v1/items/{id}', { params: { path: { id } }, body: update }))).data;
   }
 
-  async listGoals() {
-    return (await this.run(() => this.api.GET('/v1/goals'))).data.goals;
+  async listGoals(period?: string) {
+    return (await this.run(() => this.api.GET('/v1/goals', { params: { query: period ? { period } : {} } }))).data.goals;
   }
   async createGoal(input: Parameters<BrainClient['createGoal']>[0]) {
     return (await this.run(() => this.api.POST('/v1/goals', { body: input }))).data;
@@ -82,6 +82,52 @@ export class HttpBrainClient implements BrainClient {
 
   async getPlan() {
     return (await this.run(() => this.api.GET('/v1/plan'))).data;
+  }
+
+  async listCommitments() {
+    return (await this.run(() => this.api.GET('/v1/commitments'))).data.commitments;
+  }
+  async createCommitment(input: Parameters<BrainClient['createCommitment']>[0]) {
+    return (await this.run(() => this.api.POST('/v1/commitments', { body: input }))).data;
+  }
+  async getCommitment(id: string) {
+    return (await this.run(() => this.api.GET('/v1/commitments/{id}', { params: { path: { id } } }))).data;
+  }
+  async updateCommitment(id: string, update: Parameters<BrainClient['updateCommitment']>[1]) {
+    return (await this.run(() => this.api.PATCH('/v1/commitments/{id}', { params: { path: { id } }, body: update }))).data;
+  }
+  async deleteCommitment(id: string) {
+    await this.run(() => this.api.DELETE('/v1/commitments/{id}', { params: { path: { id } } }));
+  }
+  async setOccurrence(id: string, day: string, update: Parameters<BrainClient['setOccurrence']>[2]) {
+    return (await this.run(() => this.api.PUT('/v1/commitments/{id}/occurrences/{day}', { params: { path: { id, day } }, body: update }))).data;
+  }
+  async clearOccurrence(id: string, day: string) {
+    await this.run(() => this.api.DELETE('/v1/commitments/{id}/occurrences/{day}', { params: { path: { id, day } } }));
+  }
+  async listOccurrences(range: DayRange) {
+    return (await this.run(() => this.api.GET('/v1/occurrences', { params: { query: range } }))).data.occurrences;
+  }
+
+  async listJournal(range: DayRange) {
+    return (await this.run(() => this.api.GET('/v1/journal', { params: { query: range } }))).data.entries;
+  }
+  async writeJournal(day: string, body: string) {
+    return (await this.run(() => this.api.PUT('/v1/journal/{day}', { params: { path: { day } }, body: { body } }))).data;
+  }
+  async deleteJournal(day: string) {
+    await this.run(() => this.api.DELETE('/v1/journal/{day}', { params: { path: { day } } }));
+  }
+
+  async listDailyPlans(range: DayRange) {
+    return (await this.run(() => this.api.GET('/v1/daily-plans', { params: { query: range } }))).data.plans;
+  }
+  async confirmDailyPlan(day: string, input: Parameters<BrainClient['confirmDailyPlan']>[1]) {
+    return (await this.run(() => this.api.PUT('/v1/daily-plans/{day}', { params: { path: { day } }, body: input }))).data;
+  }
+
+  async getReview(range: DayRange) {
+    return (await this.run(() => this.api.GET('/v1/review', { params: { query: range } }))).data;
   }
 
   async listEdges(q: { confirmed?: boolean } = {}) {

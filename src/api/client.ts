@@ -1,6 +1,7 @@
 import type {
-  Answer, Capture, CapturePage, CaptureStatus, Edge, Goal, GoalUpdate, Item, ItemPage, ItemStatus,
-  ItemUpdate, Me, NewCapture, NewEdge, NewGoal, Plan, Question, ULID,
+  Answer, Capture, CapturePage, CaptureStatus, Commitment, CommitmentUpdate, DailyPlan, DailyPlanConfirm, Day,
+  Edge, Goal, GoalUpdate, Item, ItemPage, ItemStatus, ItemUpdate, JournalEntry, Me, NewCapture, NewCommitment,
+  NewEdge, NewGoal, Occurrence, OccurrenceUpdate, Period, Plan, Question, Review, ULID,
 } from './types';
 
 /**
@@ -23,11 +24,33 @@ export interface BrainClient {
   getItem(id: ULID): Promise<Item>;
   updateItem(id: ULID, update: ItemUpdate): Promise<Item>;
 
-  listGoals(): Promise<Goal[]>;
+  /** All goals, or only one month's (`2026-11`) or quarter's (`2026-Q4`). */
+  listGoals(period?: Period): Promise<Goal[]>;
   createGoal(input: NewGoal): Promise<Goal>;
   updateGoal(id: ULID, update: GoalUpdate): Promise<Goal>;
 
   getPlan(): Promise<Plan>;
+
+  // The planner (Brain docs/15-planner.md). Commitments are scheduled, never ranked.
+  listCommitments(): Promise<Commitment[]>;
+  createCommitment(input: NewCommitment): Promise<Commitment>;
+  getCommitment(id: ULID): Promise<Commitment>;
+  updateCommitment(id: ULID, update: CommitmentUpdate): Promise<Commitment>;
+  deleteCommitment(id: ULID): Promise<void>;
+  setOccurrence(id: ULID, day: Day, update: OccurrenceUpdate): Promise<Occurrence>;
+  clearOccurrence(id: ULID, day: Day): Promise<void>;
+  /** At most 92 days, `through` inclusive. */
+  listOccurrences(range: DayRange): Promise<Occurrence[]>;
+
+  listJournal(range: DayRange): Promise<JournalEntry[]>;
+  writeJournal(day: Day, body: string): Promise<JournalEntry>;
+  deleteJournal(day: Day): Promise<void>;
+
+  listDailyPlans(range: DayRange): Promise<DailyPlan[]>;
+  /** Send both ids: if they differ the server records the swap as a correction. */
+  confirmDailyPlan(day: Day, input: DailyPlanConfirm): Promise<DailyPlan>;
+
+  getReview(range: DayRange): Promise<Review>;
 
   listEdges(q?: { confirmed?: boolean }): Promise<Edge[]>;
   createEdge(input: NewEdge): Promise<Edge>;
@@ -36,6 +59,12 @@ export interface BrainClient {
 
   listQuestions(): Promise<Question[]>;
   answerQuestion(id: ULID, answer: Answer): Promise<void>;
+}
+
+export interface DayRange {
+  from: Day;
+  /** Inclusive. */
+  through: Day;
 }
 
 export interface PageQuery {

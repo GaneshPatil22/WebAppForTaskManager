@@ -1,106 +1,130 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
-import { Icon } from '../ui/Icon';
+import { useEffect, useState } from 'react';
+import { Link, Outlet, useRouterState } from '@tanstack/react-router';
+import { Icon, type IconKey } from '../ui/Icon';
+import { Dialog } from '../ui/Dialog';
 import { useServices, useOutbox } from './services';
-import { useEnrichmentWatcher, useCaptures, useQuestions, useSuggestions } from '../api/queries';
-import { VIEWS, isOn, viewPrefsStore } from '../domain/views';
-import { MAX_CAPTURE_CHARS } from '../outbox/outbox';
-import { useToast } from '../ui/toast';
+import { useEnrichmentWatcher, useCaptures, useSuggestions } from '../api/queries';
 import { themeStore, effectiveDark, useApplyTheme } from './theme';
-import { TimerPill, TimerRunner } from '../features/timer/Timer';
+import { prefsStore } from './prefs';
 import { ItemSheetProvider } from './itemSheet';
+import { CaptureComposer } from '../features/capture/CaptureComposer';
+import { TimerPill, TimerRunner } from '../features/timer/Timer';
+import { RemindersRunner } from '../pwa/RemindersRunner';
 import styles from './shell.module.css';
+
+interface NavDef { to: string; label: string; icon: IconKey }
+const GROUPS: { title: string; items: NavDef[] }[] = [
+  { title: 'Plan', items: [
+    { to: '/', label: 'Today', icon: 'today' },
+    { to: '/week', label: 'Week', icon: 'week' },
+    { to: '/month', label: 'Month', icon: 'month' },
+  ] },
+  { title: 'Look back', items: [
+    { to: '/review', label: 'Review', icon: 'review' },
+    { to: '/journal', label: 'Journal', icon: 'journal' },
+  ] },
+  { title: 'Decide', items: [
+    { to: '/goals', label: 'Goals', icon: 'goal' },
+    { to: '/commitments', label: 'Commitments', icon: 'repeat' },
+  ] },
+  { title: 'Captured', items: [
+    { to: '/inbox', label: 'Inbox', icon: 'inbox' },
+    { to: '/items', label: 'All items', icon: 'list' },
+  ] },
+];
 
 export function Shell() {
   useApplyTheme();
   useEnrichmentWatcher();
-  const prefs = viewPrefsStore.use();
+  const prefs = prefsStore.use();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { config } = useServices();
   const inboxCount = useInboxCount();
+  const [capturing, setCapturing] = useState(false);
+  const [more, setMore] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement as HTMLElement | null;
+      if (e.key === '/' && !/INPUT|SELECT|TEXTAREA/.test(el?.tagName ?? '') && !el?.isContentEditable && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        setCapturing(true);
+      }
+    };
+    const open = () => setCapturing(true);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('brain:capture', open);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('brain:capture', open); };
+  }, []);
+  useEffect(() => setMore(false), [path]);
+
+  const navLink = (n: NavDef, cls?: string) => (
+    <Link key={n.to} to={n.to} className={`${cls ?? ''} ${path === n.to ? styles.on : ''}`}>
+      <Icon name={n.icon} size={18} />
+      <span>{n.label}</span>
+      {n.to === '/inbox' && inboxCount ? <span className={styles.badge}>{inboxCount}</span> : null}
+    </Link>
+  );
 
   return (
     <ItemSheetProvider>
       <div className={styles.app}>
-        <nav className={styles.nav} aria-label="Main">
-          <div className={styles.logo}><i><Icon name="brain" size={18} /></i>Brain</div>
-          {VIEWS.filter((v) => isOn(prefs, v.id)).map((v) => (
-            <Link key={v.id} to={v.path} className={path === v.path ? styles.on : undefined}>
-              <Icon name={v.icon} size={20} />
-              <span>{v.title}</span>
-              {v.id === 'inbox' && inboxCount ? <span className={styles.badge}>{inboxCount}</span> : null}
-              {v.status === 'in-progress' ? <span className={styles.dot} title="In progress" /> : null}
-            </Link>
+        <nav className={styles.side} aria-label="Main">
+          <Link to="/" className={styles.logo}><i><Icon name="brain" size={16} /></i>Brain</Link>
+          {GROUPS.map((g) => (
+            <div key={g.title} className={styles.group}>
+              <div className={styles.groupTitle}>{g.title}</div>
+              {g.items.map((n) => navLink(n))}
+            </div>
           ))}
-          <Link to="/settings" className={`${styles.settings} ${path === '/settings' ? styles.on : ''}`}>
-            <Icon name="settings" size={20} /><span>Settings</span>
-          </Link>
+          <div className={styles.sideFoot}>{navLink({ to: '/settings', label: 'Settings', icon: 'settings' })}</div>
         </nav>
+
         <div className={styles.main}>
           <header className={styles.top}>
-            <CaptureBar />
-            {isOn(prefs, 'timer') ? <TimerPill /> : null}
-            {config.apiMode === 'mock' ? <span className={`chip accent ${styles.mockChip}`} title="Data comes from the in-browser mock server">Mock data</span> : null}
-            <span style={{ flex: 1 }} className={styles.spacer} />
+            <button type="button" className={styles.capTrigger} onClick={() => setCapturing(true)} aria-label="Capture anything">
+              <Icon name="plus" size={16} />
+              <span>Dump anything…</span>
+              <kbd>/</kbd>
+            </button>
+            <span className={styles.spacer} />
+            {prefs.timer ? <TimerPill /> : null}
+            {config.apiMode === 'mock' ? <span className={`chip ${styles.mock}`} title="Data comes from the in-browser mock server">Mock data</span> : null}
             <ThemeButton />
           </header>
           <SyncStrip />
           <main className={styles.page}><Outlet /></main>
         </div>
+
+        <nav className={styles.bottom} aria-label="Main (mobile)">
+          {navLink({ to: '/', label: 'Today', icon: 'today' })}
+          {navLink({ to: '/week', label: 'Week', icon: 'week' })}
+          <button type="button" className={styles.fab} onClick={() => setCapturing(true)} aria-label="Capture anything"><Icon name="plus" size={22} /></button>
+          {navLink({ to: '/inbox', label: 'Inbox', icon: 'inbox' })}
+          <button type="button" className={styles.moreBtn} onClick={() => setMore(true)}><Icon name="more" size={18} /><span>More</span></button>
+        </nav>
       </div>
+
+      <Dialog open={capturing} onClose={() => setCapturing(false)} title="Capture">
+        <CaptureComposer onDone={() => setCapturing(false)} />
+      </Dialog>
+      <Dialog open={more} onClose={() => setMore(false)} title="Brain">
+        <div className={styles.moreList}>
+          {GROUPS.flatMap((g) => g.items).filter((n) => !['/', '/week', '/inbox'].includes(n.to)).map((n) => navLink(n))}
+          {navLink({ to: '/settings', label: 'Settings', icon: 'settings' })}
+        </div>
+      </Dialog>
       <TimerRunner />
+      <RemindersRunner />
     </ItemSheetProvider>
   );
 }
 
+/** Things in the inbox that need you: unsent or refused captures, and suggested links. */
 function useInboxCount(): number {
-  const q = useQuestions();
   const s = useSuggestions();
   const outbox = useOutbox();
-  return (q.data?.length ?? 0) + (s.data?.length ?? 0) + outbox.length;
-}
-
-function CaptureBar() {
-  const { outbox } = useServices();
-  const toast = useToast();
-  const navigate = useNavigate();
-  const [text, setText] = useState('');
-  const input = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = document.activeElement?.tagName ?? '';
-      if (e.key === '/' && !/INPUT|SELECT|TEXTAREA/.test(t) && !(document.activeElement as HTMLElement | null)?.isContentEditable) {
-        e.preventDefault();
-        input.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    const onFocusCapture = () => input.current?.focus();
-    window.addEventListener('brain:focus-capture', onFocusCapture);
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('brain:focus-capture', onFocusCapture); };
-  }, []);
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    const v = text.trim();
-    if (!v) return;
-    if ([...v].length > MAX_CAPTURE_CHARS) {
-      toast(`That’s over ${MAX_CAPTURE_CHARS.toLocaleString()} characters. Split it into smaller captures.`);
-      return;
-    }
-    setText('');
-    await outbox.enqueue(v, 'text');
-    toast('Captured. Brain is organising it.', { label: 'Open inbox', run: () => { void navigate({ to: '/inbox' }); } });
-  }
-
-  return (
-    <form className={styles.cap} onSubmit={submit} autoComplete="off">
-      <input ref={input} value={text} onChange={(e) => setText(e.target.value)}
-        placeholder="Dump anything: a task, idea, link… (press / to focus)" aria-label="Capture anything" />
-      <button className="btn primary" type="submit">Capture</button>
-    </form>
-  );
+  return (s.data?.length ?? 0) + outbox.length;
 }
 
 /** Says, without alarm, when captures are waiting to reach the server. */
@@ -116,12 +140,12 @@ function SyncStrip() {
   return (
     <div className={styles.strip}>
       {failing || serverDown ? (
-        <div className="banner danger">
+        <div className="banner">
           <Icon name="cloudOff" size={15} />
           <span>
             {pending.length
               ? `${pending.length} capture${pending.length === 1 ? '' : 's'} saved on this device, waiting for Brain. Nothing is lost.`
-              : 'Can’t reach Brain right now.'}
+              : 'Can’t reach Brain right now. Anything you capture is kept on this device.'}
           </span>
           {pending.length ? <button className="btn sm" onClick={() => outbox.retryNow()}>Retry now</button> : null}
         </div>
@@ -129,7 +153,7 @@ function SyncStrip() {
         <div className="banner info"><span className="spin"><Icon name="refresh" size={14} /></span><span>Saving {pending.length} capture{pending.length === 1 ? '' : 's'}…</span></div>
       ) : null}
       {rejected.length ? (
-        <div className="banner danger"><span>{rejected.length} capture{rejected.length === 1 ? ' was' : 's were'} refused by the server. See the Inbox.</span><Link to="/inbox" className="btn sm">Open inbox</Link></div>
+        <div className="banner danger"><span>{rejected.length} capture{rejected.length === 1 ? ' was' : 's were'} refused by the server. They’re kept in the Inbox.</span><Link to="/inbox" className="btn sm">Open inbox</Link></div>
       ) : null}
     </div>
   );
@@ -146,6 +170,7 @@ function ThemeButton() {
   );
 }
 
-export function focusCapture() {
-  window.dispatchEvent(new Event('brain:focus-capture'));
+/** Opens the capture dialog from anywhere. */
+export function openCapture() {
+  window.dispatchEvent(new Event('brain:capture'));
 }

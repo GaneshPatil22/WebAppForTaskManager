@@ -1,267 +1,161 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import type { Item, RankedItem } from '../../api/types';
-import { useItems, useItemsById, usePlan, useToday, useUpdateItem } from '../../api/queries';
-import { buildBoard, reorder, type BoardGroup } from '../../domain/board';
-import { EFFORT_MINUTES } from '../../domain/labels';
-import { dayKey, fmtMinutes, longDay } from '../../domain/time';
-import { isOn, viewPrefsStore } from '../../domain/views';
-import { planner, plannerStore } from '../../local/planner';
-import { timer } from '../../local/timer';
-import { InProgress, QueryProblem, Ring, Skeleton } from '../../ui/components';
+import type { Plan, ScheduledCommitment } from '../../api/types';
+import { useDailyPlans, useItemsById, useJournal, useOccurrences, usePlan, useCommitments } from '../../api/queries';
 import { Icon } from '../../ui/Icon';
-import { useToast } from '../../ui/toast';
-import { ItemRow } from '../items/ItemRow';
-import { TimerCard } from '../timer/Timer';
-import { QuestionsCard } from '../shared/Questions';
-import { SuggestionsCard } from '../shared/Suggestions';
-import { TodayRepeats, ComingUpCard } from '../repeats/RepeatsWidgets';
-import { focusCapture } from '../../app/Shell';
+import { Dialog } from '../../ui/Dialog';
+import { ProposalTag, QueryProblem, Skeleton } from '../../ui/components';
+import { OccurrenceRow, type OccurrenceView } from '../commitments/OccurrenceRow';
+import { JournalEditor } from '../journal/JournalEditor';
+import { BigTask, Chooser } from './BigTask';
+import { Candidates } from './Candidates';
+import { TodayQuestion } from '../questions/Questions';
+import { addDaysToKey, fmtMinutes, longDay, type DayKey } from '../../domain/time';
 import styles from './today.module.css';
 
+/**
+ * Today has two halves that must never read as one list:
+ * - Committed: scheduled, decided once by you. A checklist. Teal.
+ * - Ranked by Brain: captured work in Brain's order. Numbered. Indigo.
+ * The big task is the hinge: a daily slot filled from the ranked pile.
+ * "Today" is the plan's `day`, which the server computes in your timezone.
+ */
 export function TodayPage() {
   const plan = usePlan();
-  const items = useItems();
-  const prefs = viewPrefsStore.use();
-  const local = plannerStore.use();
-  const { today, tz } = useToday();
-  const [rearrange, setRearrange] = useState(false);
-  const toast = useToast();
+  if (plan.error && !plan.data) return <><Head /><QueryProblem error={plan.error} what="today’s plan" onRetry={() => void plan.refetch()} /></>;
+  if (!plan.data) return <><Head /><Skeleton rows={4} /></>;
+  return <Today plan={plan.data} refreshing={plan.isFetching} onRefresh={() => void plan.refetch()} />;
+}
 
-  const notNow = useMemo(() => new Set(local.notNow[today] ?? []), [local.notNow, today]);
-  const blockedIds = useMemo(() => new Set(plan.data?.blocked.map((b) => b.item.id) ?? []), [plan.data]);
-  const doneToday = useMemo(
-    () => (items.data ?? []).filter((i) => i.status === 'done' && dayKey(new Date(i.updatedAt), tz) === today),
-    [items.data, tz, today],
-  );
-  const board = useMemo(() => plan.data ? buildBoard({
-    ranked: plan.data.ranked, blockedIds, doneToday, notNow, order: local.order[today] ?? [],
-  }) : [], [plan.data, blockedIds, doneToday, notNow, local.order, today]);
+function Head({ children }: { children?: React.ReactNode }) {
+  return <div className="page-head">{children ?? <div className="grow"><h1>Today</h1></div>}</div>;
+}
 
-  const boardOn = isOn(prefs, 'board');
-  const startable = (plan.data?.ranked ?? []).filter((r) => !blockedIds.has(r.item.id) && !notNow.has(r.item.id));
-  // The server's `next`, unless you said "not now" to it on this device.
-  const next = plan.data?.next && !notNow.has(plan.data.next.item.id) ? plan.data.next : startable[0];
+const toView = (s: ScheduledCommitment, day: DayKey): OccurrenceView => ({
+  commitment: s.commitment,
+  day: s.movedFrom ?? day,
+  place: day,
+  state: s.state,
+  movedTo: s.movedTo,
+});
 
-  const rows = boardOn ? board.flatMap((g) => g.slots) : [...doneToday.map((item) => ({ item, done: true })), ...startable.map((r) => ({ item: r.item, done: false }))];
-  const done = rows.filter((r) => r.done).length;
-  const left = rows.filter((r) => !r.done).reduce((a, r) => a + EFFORT_MINUTES[r.item.effort.value ?? 'unknown'], 0);
+function Today({ plan, refreshing, onRefresh }: { plan: Plan; refreshing: boolean; onRefresh: () => void }) {
+  const day = plan.day;
+  const [planning, setPlanning] = useState(false);
+  const views = plan.commitments.map((s) => toView(s, day));
+  const owed = views.filter((v) => !v.state && v.place === day);
+  const doneN = views.filter((v) => v.state === 'done').length;
+  const due = views.filter((v) => v.state !== 'moved' && v.state !== 'skipped').length;
 
   return (
     <>
-      <div className={styles.thead}>
-        <Ring value={rows.length ? done / rows.length : 0}><b style={{ fontSize: 14 }}>{done}/{rows.length}</b></Ring>
-        <div className={styles.tl}>
-          <h1>{longDay(today)}</h1>
-          <p>{rows.length - done ? `${rows.length - done} to go, about ${fmtMinutes(left)} of work.` : rows.length ? 'Everything planned is done.' : 'Nothing planned yet.'}</p>
+      <Head>
+        <div className="grow">
+          <h1>{longDay(day)}</h1>
+          <p>
+            {plan.commitments.length
+              ? <>{doneN} of {due} commitments done{plan.committedMinutes ? <> · {fmtMinutes(plan.committedMinutes)} still committed</> : null}</>
+              : 'No commitments today.'}
+          </p>
         </div>
-        <div className={styles.tr}>
-          {boardOn ? (
-            <button className={`btn ${rearrange ? 'on' : ''}`} onClick={() => setRearrange((r) => !r)}>
-              <Icon name="sort" size={15} />{rearrange ? 'Done rearranging' : 'Rearrange'}
-            </button>
-          ) : null}
-          <button className="btn primary" onClick={() => void plan.refetch().then(() => toast('Plan refreshed from your latest graph.'))} disabled={plan.isFetching}>
-            <span className={plan.isFetching ? 'spin' : ''} style={{ display: 'inline-flex' }}><Icon name="refresh" size={15} /></span>
-            {plan.isFetching ? 'Refreshing…' : 'Refresh my plan'}
-          </button>
-        </div>
-      </div>
-
-      <div className={styles.today}>
-        <div>
-          {plan.error ? <QueryProblem error={plan.error} what="your plan" onRetry={() => void plan.refetch()} />
-            : plan.isLoading ? <Skeleton rows={4} />
-            : (
-              <>
-                <Hero next={next} timerOn={isOn(prefs, 'timer')} today={today} />
-                {boardOn
-                  ? <Board groups={board} rearrange={rearrange} today={today} />
-                  : <RankedList ranked={startable} />}
-                {notNow.size ? <NotNowList ids={[...notNow]} today={today} /> : null}
-              </>
-            )}
-          {isOn(prefs, 'repeats') ? <TodayRepeats /> : null}
-        </div>
-        <aside className={styles.side}>
-          {isOn(prefs, 'timer') ? <TimerCard /> : null}
-          {isOn(prefs, 'questions') ? <QuestionsCard limit={2} /> : null}
-          {isOn(prefs, 'suggestions') ? <SuggestionsCard limit={2} /> : null}
-          {isOn(prefs, 'quickWins') && plan.data?.quickWins.length ? <QuickWins list={plan.data.quickWins.filter((q) => !notNow.has(q.item.id))} /> : null}
-          {isOn(prefs, 'blocked') && plan.data?.blocked.length ? <Blocked /> : null}
-          {isOn(prefs, 'comingUp') && isOn(prefs, 'repeats') ? <ComingUpCard /> : null}
-        </aside>
-      </div>
-    </>
-  );
-}
-
-function Hero({ next, timerOn, today }: { next: RankedItem | undefined; timerOn: boolean; today: string }) {
-  const update = useUpdateItem();
-  const toast = useToast();
-  if (!next) {
-    return (
-      <section className={`${styles.hero} ${styles.clear}`}>
-        <div className={styles.tag}>Do next</div>
-        <h2>You’re clear.</h2>
-        <p className={styles.why}>Nothing can be started right now. Capture something new, or look at the week.</p>
-        <div className={styles.act}>
-          <button className="btn gold" onClick={focusCapture}>Capture something</button>
-          <Link to="/week" className="btn ghost">Open the week</Link>
-        </div>
-      </section>
-    );
-  }
-  const minutes = EFFORT_MINUTES[next.item.effort.value ?? 'unknown'];
-  return (
-    <section className={styles.hero} aria-label="Do next">
-      <div className={styles.tag}>Do next</div>
-      <h2>{next.item.title}</h2>
-      <p className={styles.why}>{next.reason}</p>
-      <div className={styles.act}>
-        {timerOn ? (
-          <button className="btn gold" onClick={() => { timer.forItem(next.item, minutes); document.getElementById('timer')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }}>
-            <Icon name="play" size={14} />{minutes >= 25 ? 'Start 25 min focus' : `Start ${minutes} min timer`}
-          </button>
-        ) : null}
-        <button className="btn ghost" onClick={() => update.mutate({ id: next.item.id, update: { status: 'done' } }, {
-          onSuccess: () => toast(`Done: ${next.item.title}`, { label: 'Undo', run: () => update.mutate({ id: next.item.id, update: { status: 'open' } }) }),
-          onError: () => toast('Couldn’t save that. Try again.'),
-        })}>Mark done</button>
-        <button className="btn ghost" title="Hides it from today on this device. In progress." onClick={() => {
-          planner.notNow(next.item.id, today);
-          toast('Hidden for today.', { label: 'Undo', run: () => planner.undoNotNow(next.item.id, today) });
-        }}>Not now</button>
-      </div>
-    </section>
-  );
-}
-
-function Board({ groups, rearrange, today }: { groups: BoardGroup[]; rearrange: boolean; today: string }) {
-  const toast = useToast();
-  const move = (id: string, dir: -1 | 1) => planner.setOrder(today, reorder(groups, id, dir));
-  return (
-    <div>
-      <p className={styles.boardNote}>
-        <InProgress note="The grouping and your rearranging are kept on this device. The order inside each group is Brain’s." />
-        <span>Grouped from Brain’s ranking. Rearranging stays on this device.</span>
-        {rearrange ? <button className="btn sm" onClick={() => { planner.clearOrder(today); toast('Back to Brain’s order.'); }}>Reset order</button> : null}
-      </p>
-      {groups.map((g) => {
-        const all = [...g.slots, ...g.overflow];
-        const doneN = g.slots.filter((r) => r.done).length;
-        const actions = (row: (typeof all)[number]) => {
-          if (rearrange) {
-            const i = all.indexOf(row);
-            return (
-              <>
-                <button className="icon-btn" aria-label="Move up" disabled={i === 0} onClick={() => move(row.item.id, -1)}><Icon name="up" /></button>
-                <button className="icon-btn" aria-label="Move down" disabled={i === all.length - 1} onClick={() => move(row.item.id, 1)}><Icon name="down" /></button>
-              </>
-            );
-          }
-          return row.done ? null : <RowActions item={row.item} today={today} />;
-        };
-        return (
-          <div className={styles.grp} key={g.id}>
-            <div className={styles.ghead}>
-              <div className={styles.gnum}>{g.n}</div>
-              <div><div className={styles.gname}>{g.name}</div><div className={styles.ghint}>{g.hint}</div></div>
-              <div className={styles.gcount}>{doneN} of {g.slots.length} done</div>
-            </div>
-            <ul className="list">
-              {g.slots.map((r) => <ItemRow key={r.item.id} item={r.item} ranked={r.ranked} done={r.done} actions={actions(r)} />)}
-              {g.slots.length < g.n ? (
-                <li><button type="button" className={styles.emptySlot} onClick={focusCapture}>
-                  {g.slots.length ? `${g.n - g.slots.length} open slot${g.n - g.slots.length === 1 ? '' : 's'}.` : 'Nothing this size right now.'} Capture something, or leave it light.
-                </button></li>
-              ) : null}
-            </ul>
-            {g.overflow.length ? (
-              <>
-                <p className={styles.overNote}>{g.overflow.length} more than fits today. They wait, ranked.</p>
-                <ul className="list dashed">{g.overflow.map((r) => <ItemRow key={r.item.id} item={r.item} ranked={r.ranked} actions={actions(r)} />)}</ul>
-              </>
-            ) : null}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function RankedList({ ranked }: { ranked: RankedItem[] }) {
-  const { today } = useToday();
-  return (
-    <>
-      <h2 className="section-title">Ranked for you</h2>
-      {ranked.length
-        ? <ul className="list">{ranked.map((r) => <ItemRow key={r.item.id} item={r.item} ranked={r} showReason actions={<RowActions item={r.item} today={today} />} />)}</ul>
-        : <ul className="list"><li className="empty">Nothing to rank yet.</li></ul>}
-    </>
-  );
-}
-
-function RowActions({ item, today }: { item: Item; today: string }) {
-  const prefs = viewPrefsStore.use();
-  const toast = useToast();
-  const minutes = EFFORT_MINUTES[item.effort.value ?? 'unknown'];
-  return (
-    <>
-      {isOn(prefs, 'timer') ? (
-        <button className="icon-btn" title={`Start a ${fmtMinutes(minutes)} timer`} aria-label={`Start a timer for ${item.title}`}
-          onClick={() => { timer.forItem(item, minutes); document.getElementById('timer')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }}>
-          <Icon name="play" size={13} />
+        <button type="button" className="btn" onClick={() => setPlanning(true)}><Icon name="arrowRight" size={14} />Plan tomorrow</button>
+        <button type="button" className="icon-btn" onClick={onRefresh} aria-label="Refresh" title="Refresh">
+          <span className={refreshing ? 'spin' : undefined}><Icon name="refresh" size={16} /></span>
         </button>
-      ) : null}
-      <button className="btn sm" title="Hide from today, on this device" onClick={() => {
-        planner.notNow(item.id, today);
-        toast('Hidden for today.', { label: 'Undo', run: () => planner.undoNotNow(item.id, today) });
-      }}>Not now</button>
+      </Head>
+
+      <TodayQuestion />
+
+      <div className={styles.grid}>
+        <div className={styles.areaBig}><BigTask plan={plan} day={day} /></div>
+
+        <div className={styles.side}>
+          <section className={`${styles.areaSched} ${styles.sched}`} aria-label="Committed today">
+            <div className={styles.schedHead}>
+              <h2><span className={styles.schedDot} />Committed</h2>
+              <Link to="/commitments" className="link-btn">Edit</Link>
+            </div>
+            <p className={styles.schedSub}>Scheduled by you, not ranked.{owed.length ? ` ${owed.length} left.` : ''}</p>
+            {views.length ? (
+              <ul className={styles.occList}>
+                {views.map((v) => <OccurrenceRow key={`${v.commitment.id}|${v.day}`} o={v} today={day} />)}
+              </ul>
+            ) : (
+              <p className="empty">Nothing scheduled. Habits, reviews and payments live in <Link to="/commitments">Commitments</Link>.</p>
+            )}
+          </section>
+
+          <section className={styles.areaJournal} aria-label="Journal">
+            <div className="section-head" style={{ marginTop: 22 }}><h2>Journal</h2><span className="grow" /><Link to="/journal" className="link-btn">All entries</Link></div>
+            <TodayJournal day={day} />
+          </section>
+        </div>
+
+        <div className={styles.areaRanked}><Candidates plan={plan} exclude={plan.bigTask?.itemId ?? plan.next?.item.id} /></div>
+      </div>
+
+      <Dialog open={planning} onClose={() => setPlanning(false)} title="Plan tomorrow" wide>
+        <PlanTomorrow plan={plan} />
+      </Dialog>
     </>
   );
 }
 
-function NotNowList({ ids, today }: { ids: string[]; today: string }) {
-  const byId = useItemsById();
-  const rows = ids.map((id) => byId.get(id)).filter((i): i is Item => !!i && i.status === 'open');
-  if (!rows.length) return null;
-  return (
-    <>
-      <h2 className="section-title">Not today <InProgress /></h2>
-      <ul className="list dashed">
-        {rows.map((i) => <ItemRow key={i.id} item={i} actions={<button className="btn sm" onClick={() => planner.undoNotNow(i.id, today)}>Bring back</button>} />)}
-      </ul>
-    </>
-  );
+function TodayJournal({ day }: { day: DayKey }) {
+  const j = useJournal({ from: day, through: day });
+  if (j.error) return <QueryProblem error={j.error} what="the journal" />;
+  if (!j.data) return <Skeleton rows={1} />;
+  return <JournalEditor day={day} entry={j.data[0]} />;
 }
 
-function QuickWins({ list }: { list: RankedItem[] }) {
-  if (!list.length) return null;
-  return (
-    <section className="card">
-      <h3>Quick wins</h3>
-      <p className="sub">Small, and worth it. From Brain’s ranking.</p>
-      <ul className={styles.mini}>{list.slice(0, 5).map((r) => <ItemRow key={r.item.id} item={r.item} ranked={r} />)}</ul>
-    </section>
-  );
-}
-
-function Blocked() {
-  const plan = usePlan();
+/**
+ * The evening ritual: see what tomorrow already holds, then pick its big
+ * task. Brain's current pick is the proposal; choosing another is a swap.
+ */
+function PlanTomorrow({ plan }: { plan: Plan }) {
+  const tomorrow = addDaysToKey(plan.day, 1);
+  const range = { from: tomorrow, through: tomorrow };
+  const occ = useOccurrences(range);
+  const commitments = useCommitments();
+  const dp = useDailyPlans(range);
   const byId = useItemsById();
+  const [choosing, setChoosing] = useState(false);
+  const cById = new Map((commitments.data ?? []).map((c) => [c.id, c]));
+  const views: OccurrenceView[] = (occ.data ?? [])
+    .filter((o) => (o.movedTo ?? o.day) === tomorrow)
+    .flatMap((o) => { const c = cById.get(o.commitmentId); return c ? [{ commitment: c, day: o.day, place: tomorrow, state: o.state, movedTo: o.movedTo }] : []; });
+  const minutes = views.filter((v) => !v.state).reduce((n, v) => n + v.commitment.minutes, 0);
+  const confirmed = dp.data?.[0];
+  const chosen = confirmed ? byId.get(confirmed.itemId) : undefined;
+
   return (
-    <section className="card">
-      <h3>Blocked</h3>
-      <p className="sub">Waiting on something else first.</p>
-      <ul className={styles.blocked}>
-        {plan.data!.blocked.map((b) => (
-          <li key={b.item.id}>
-            <b>{b.item.title}</b>
-            <span className="sub">waits for {b.blockedBy.map((id) => byId.get(id)?.title ?? 'an item').join(', ')}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <section>
+        <h3 className={styles.dlgH}>{longDay(tomorrow)}: already committed</h3>
+        {occ.error || commitments.error ? <QueryProblem error={occ.error ?? commitments.error} what="tomorrow’s commitments" /> : !occ.data ? <Skeleton rows={2} /> : views.length ? (
+          <>
+            <p className="sub">{views.length} commitments{minutes ? `, about ${fmtMinutes(minutes)}` : ''}. Shown so you know how much room the day has; nothing here is subtracted for you.</p>
+            <ul className={styles.tomorrowList}>
+              {views.map((v) => <OccurrenceRow key={`${v.commitment.id}|${v.day}`} o={v} today={plan.day} compact />)}
+            </ul>
+          </>
+        ) : <p className="sub">Nothing scheduled.</p>}
+      </section>
+      <section>
+        <h3 className={styles.dlgH}>Tomorrow’s big task</h3>
+        {confirmed ? (
+          <div className={styles.tomorrowPick}>
+            <div><b>{chosen?.title ?? 'An item'}</b><p className="sub">{confirmed.swapped ? 'You chose this over Brain’s pick.' : 'Brain’s pick, confirmed by you.'}</p></div>
+            <button type="button" className="btn sm" onClick={() => setChoosing(true)}>Change</button>
+          </div>
+        ) : plan.next ? (
+          <div className={`${styles.tomorrowPick} ${styles.bigProposed}`}>
+            <div><ProposalTag /><p style={{ marginTop: 6 }}><b>{plan.next.item.title}</b></p><p className="sub">{plan.next.reason}</p></div>
+            <button type="button" className="btn sm primary" onClick={() => setChoosing(true)}>Choose</button>
+          </div>
+        ) : <p className="sub">Nothing to propose yet.</p>}
+      </section>
+      <Chooser open={choosing} onClose={() => setChoosing(false)} day={tomorrow} plan={plan} current={confirmed?.itemId} title="Choose tomorrow’s big task" />
+    </div>
   );
 }

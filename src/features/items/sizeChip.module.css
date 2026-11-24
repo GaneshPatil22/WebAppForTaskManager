@@ -1,0 +1,20 @@
+.wrap { position: relative; display: inline-flex; flex: none; }
+.chip {
+  all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12.5px; font-weight: 600; line-height: 1; padding: 5px 9px; border-radius: 999px; white-space: nowrap;
+}
+.chip:focus-visible { outline: 2px solid var(--rank); outline-offset: 2px; }
+.yours { color: var(--ink); background: var(--surface2); border: 1px solid var(--line-strong); }
+/* A guess looks like one: lighter, dashed, amber, and says so. */
+.guess { color: var(--proposal); background: transparent; border: 1px dashed var(--proposal-line); font-weight: 500; }
+.model { color: var(--proposal); background: transparent; border: 1px dashed var(--proposal-line); font-weight: 400; opacity: .85; }
+.unknown { color: var(--faint); border: 1px dashed var(--line-strong); font-weight: 500; }
+.mark { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; opacity: .85; }
+.menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 170px;
+  display: flex; flex-direction: column; padding: 4px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--line-strong); box-shadow: 0 10px 30px rgb(0 0 0 / .16);
+}
+.menu button { all: unset; cursor: pointer; padding: 8px 10px; border-radius: 8px; font-size: 14px; }
+.menu button:hover, .menu button:focus-visible { background: var(--surface2); }
+.menu .current { font-weight: 700; }

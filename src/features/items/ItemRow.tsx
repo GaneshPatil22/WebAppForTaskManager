@@ -1,75 +1,56 @@
 import type { ReactNode } from 'react';
-import type { Item, RankedItem } from '../../api/types';
-import { useGoalsById, useToday, useUpdateItem } from '../../api/queries';
-import { CATEGORY_LABEL, EFFORT_SHORT, TYPE_LABEL, decidedByLabel } from '../../domain/labels';
-import { dueLabel } from '../../domain/time';
-import { Icon } from '../../ui/Icon';
+import type { Item } from '../../api/types';
+import { useGoalsById, useToday } from '../../api/queries';
 import { useOpenItem } from '../../app/itemSheet';
-import { useToast } from '../../ui/toast';
+import { Val } from '../../ui/components';
+import { EFFORT_LABEL, TYPE_LABEL } from '../../domain/labels';
+import { dueLabel } from '../../domain/time';
+import { SizeChip } from './SizeChip';
 import styles from './items.module.css';
 
-/** Suggested values are dashed; values the user set are solid. */
-function Field({ suggested, title, children, tone }: { suggested: boolean; title: string; children: ReactNode; tone?: string }) {
-  return <span className={`chip ${suggested ? 'suggested' : ''} ${tone ?? ''}`} title={title}>{children}</span>;
-}
-
-export function ItemMeta({ item, ranked, compact }: { item: Item; ranked?: RankedItem | undefined; compact?: boolean }) {
-  const goals = useGoalsById();
+/**
+ * One line of facts about an item. Every classified value is marked when it
+ * is Brain's guess (dashed, amber) rather than yours (plain). Nothing is
+ * shown that Brain didn't decide.
+ */
+export function ItemMeta({ item, showType = false, showSize = true }: { item: Item; showType?: boolean; showSize?: boolean }) {
   const { now, tz } = useToday();
-  const s = (d: Item['type']['decidedBy']) => decidedByLabel(d).suggested;
+  const goals = useGoalsById();
+  const parts: ReactNode[] = [];
+  if (showType && item.type.value) parts.push(<Val key="t" by={item.type.decidedBy}>{TYPE_LABEL[item.type.value]}</Val>);
+  if (showSize && item.effort.value && item.effort.value !== 'unknown') parts.push(<Val key="e" by={item.effort.decidedBy}>{EFFORT_LABEL[item.effort.value]}</Val>);
+  if (item.dueAt.value) {
+    const d = dueLabel(item.dueAt.value, now, tz);
+    parts.push(<span key="d" className={d.urgent && item.status === 'open' ? styles.urgent : undefined}><Val by={item.dueAt.decidedBy}>{d.text}</Val></span>);
+  }
   const goal = item.goal.value ? goals.get(item.goal.value) : undefined;
-  const due = item.dueAt.value ? dueLabel(item.dueAt.value, now, tz) : null;
-  return (
-    <div className="meta">
-      {!compact ? (
-        item.type.value
-          ? <Field suggested={s(item.type.decidedBy)} title={decidedByLabel(item.type.decidedBy).text}>{TYPE_LABEL[item.type.value]}</Field>
-          : <span className="chip suggested" title="Brain wasn’t sure, so it didn’t guess">Type?</span>
-      ) : null}
-      {item.effort.value && item.effort.value !== 'unknown'
-        ? <Field suggested={s(item.effort.decidedBy)} title={decidedByLabel(item.effort.decidedBy).text}>{EFFORT_SHORT[item.effort.value]}</Field>
-        : <span className="chip suggested" title="No effort given. Scored as medium.">Effort?</span>}
-      {due ? <Field suggested={s(item.dueAt.decidedBy)} title={decidedByLabel(item.dueAt.decidedBy).text} tone={due.urgent ? 'danger' : ''}>{due.text}</Field> : null}
-      {goal ? <span className={styles.goal}><Icon name="goal" size={12} />{goal.title}</span> : null}
-      {!compact && item.category.value ? <span>{CATEGORY_LABEL[item.category.value]}</span> : null}
-      {ranked && ranked.why.mayUnblock > 0 ? <span title="Through links you haven't confirmed">may unblock {ranked.why.mayUnblock} more</span> : null}
-    </div>
-  );
+  if (goal) parts.push(<Val key="g" by={item.goal.decidedBy}>{goal.title}</Val>);
+  if (!parts.length) return null;
+  return <span className={styles.meta}>{parts.flatMap((p, i) => (i ? [<span key={`s${i}`} aria-hidden> · </span>, p] : [p]))}</span>;
 }
 
-export function DoneButton({ item, done }: { item: Item; done?: boolean }) {
-  const update = useUpdateItem();
-  const toast = useToast();
-  const isDone = done ?? item.status === 'done';
-  return (
-    <button type="button" className={`${styles.lead} ${isDone ? styles.leadDone : ''}`}
-      aria-label={isDone ? `Mark not done: ${item.title}` : `Mark done: ${item.title}`}
-      onClick={() => {
-        const status = isDone ? 'open' : 'done';
-        update.mutate({ id: item.id, update: { status } }, {
-          onSuccess: () => { if (status === 'done') toast(`Done: ${item.title}`, { label: 'Undo', run: () => update.mutate({ id: item.id, update: { status: 'open' } }) }); },
-          onError: () => toast('Couldn’t save that. Try again.'),
-        });
-      }}>
-      {isDone ? <Icon name="check" size={15} /> : null}
-    </button>
-  );
-}
-
-export function ItemRow({ item, ranked, actions, done, showReason }: {
-  item: Item; ranked?: RankedItem | undefined; actions?: ReactNode; done?: boolean; showReason?: boolean;
+/**
+ * A tappable item: opens the editor. `lead` and `actions` are the caller's.
+ * An open item's size is a chip you can change in one tap.
+ */
+export function ItemRow({ item, lead, actions, reason, showType }: {
+  item: Item; lead?: ReactNode; actions?: ReactNode; reason?: string | undefined; showType?: boolean;
 }) {
   const open = useOpenItem();
-  const isDone = done ?? item.status !== 'open';
+  const closed = item.status !== 'open';
+  // Notes, ideas and links have no size unless Brain gave them one.
+  const sized = !!item.effort.value && item.effort.value !== 'unknown';
+  const sizeChip = !closed && (sized || !['note', 'idea', 'link'].includes(item.type.value ?? ''));
   return (
-    <li className={`${styles.row} ${isDone ? styles.isDone : ''}`}>
-      {item.status === 'dropped' ? <span className={styles.dropped} title="Dropped">–</span> : <DoneButton item={item} done={isDone} />}
-      <div className={styles.body}>
-        <button type="button" className={styles.title} onClick={() => open(item.id)}>{item.title}</button>
-        {showReason && ranked ? <div className={styles.reason}>{ranked.reason}</div> : null}
-        <ItemMeta item={item} ranked={ranked} />
-      </div>
-      <div className={styles.acts}>{actions}</div>
-    </li>
+    <div className={`${styles.row} ${closed ? styles.closed : ''}`}>
+      {lead}
+      <button type="button" className={styles.main} onClick={() => open(item.id)}>
+        <span className={styles.title}>{item.title}</span>
+        <ItemMeta item={item} showType={!!showType} showSize={!sizeChip} />
+        {reason ? <span className={styles.reason}>{reason}</span> : null}
+      </button>
+      {sizeChip ? <SizeChip item={item} /> : null}
+      {actions ? <span className={styles.actions}>{actions}</span> : null}
+    </div>
   );
 }

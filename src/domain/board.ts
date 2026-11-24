@@ -10,6 +10,10 @@ import type { Effort, Item, RankedItem } from '../api/types';
  * big = large/xlarge, medium = medium (and unknown, which Brain scores as
  * medium), quick = tiny/small. When a bucket has fewer candidates than
  * slots it is under-filled and says so, never padded.
+ *
+ * The user can move an item to another bucket for the day. That is a view
+ * choice kept on the device: it does not change the item's effort, which
+ * would be a correction sent to Brain.
  */
 export type BucketId = 'big' | 'medium' | 'quick';
 
@@ -48,6 +52,8 @@ export interface BoardInput {
   notNow: ReadonlySet<string>;
   /** Manual order for today, if the user rearranged. */
   order: readonly string[];
+  /** Buckets the user moved items into today, by item id. */
+  moved?: Readonly<Record<string, BucketId>>;
 }
 
 export function buildBoard(input: BoardInput): BoardGroup[] {
@@ -55,13 +61,15 @@ export function buildBoard(input: BoardInput): BoardGroup[] {
   const byOrder = (a: BoardRow, b: BoardRow) =>
     (pos.get(a.item.id) ?? Infinity) - (pos.get(b.item.id) ?? Infinity);
 
+  const bucket = (i: Item) => input.moved?.[i.id] ?? bucketOf(i.effort.value);
+
   return BUCKETS.map((b) => {
     const done: BoardRow[] = input.doneToday
-      .filter((i) => bucketOf(i.effort.value) === b.id)
+      .filter((i) => bucket(i) === b.id)
       .map((item) => ({ item, done: true }));
     const open: BoardRow[] = input.ranked
       .filter((r) => !input.blockedIds.has(r.item.id) && !input.notNow.has(r.item.id))
-      .filter((r) => bucketOf(r.item.effort.value) === b.id)
+      .filter((r) => bucket(r.item) === b.id)
       .map((r) => ({ item: r.item, ranked: r, done: false }));
     // Stable sort: server order survives wherever the user expressed none.
     const rows = [...done, ...open].sort(byOrder);
@@ -69,13 +77,41 @@ export function buildBoard(input: BoardInput): BoardGroup[] {
   });
 }
 
-/** Moves an id one step within its bucket's visible list, returning the new full order. */
-export function reorder(groups: BoardGroup[], id: string, dir: -1 | 1): string[] {
+export interface Move {
+  /** The new full order across the board. */
+  order: string[];
+  /** Set when the item changed bucket. */
+  to?: BucketId;
+}
+
+/**
+ * Moves an item one step. Inside a bucket it swaps with its neighbour. From
+ * the top of a bucket it goes to the bottom of the bucket above; from the
+ * bottom, to the top of the bucket below. Returns null at the board's ends.
+ */
+export function moveStep(groups: BoardGroup[], id: string, dir: -1 | 1): Move | null {
   const lists = groups.map((g) => [...g.slots, ...g.overflow].map((r) => r.item.id));
-  for (const l of lists) {
-    const i = l.indexOf(id);
-    const j = i + dir;
-    if (i >= 0 && j >= 0 && j < l.length) [l[i], l[j]] = [l[j]!, l[i]!];
+  const gi = lists.findIndex((l) => l.includes(id));
+  if (gi < 0) return null;
+  const l = lists[gi]!;
+  const i = l.indexOf(id);
+  const j = i + dir;
+  if (j >= 0 && j < l.length) {
+    [l[i], l[j]] = [l[j]!, l[i]!];
+    return { order: lists.flat() };
   }
-  return lists.flat();
+  const gj = gi + dir;
+  if (gj < 0 || gj >= lists.length) return null;
+  l.splice(i, 1);
+  if (dir < 0) lists[gj]!.push(id); else lists[gj]!.unshift(id);
+  return { order: lists.flat(), to: groups[gj]!.id };
+}
+
+/** Moves an item straight to the end of another bucket's list. */
+export function moveTo(groups: BoardGroup[], id: string, to: BucketId): Move {
+  const lists = groups.map((g) => [...g.slots, ...g.overflow].map((r) => r.item.id).filter((x) => x !== id));
+  const gj = groups.findIndex((g) => g.id === to);
+  // Into the first free slot if there is one, otherwise first in line behind the full slots.
+  lists[gj]!.splice(Math.min(lists[gj]!.length, groups[gj]!.n), 0, id);
+  return { order: lists.flat(), to };
 }

@@ -7,9 +7,10 @@
  * BrainClient and never rank anything. If this ever disagrees with Brain,
  * Brain is right.
  */
-import type { BlockedItem, Edge, Item, Plan, RankedItem, Why } from '../types';
+import type { BlockedItem, Edge, Goal, Item, Plan, RankedItem, Why } from '../types';
 import { EFFORT_LABEL, EFFORT_MINUTES } from '../../domain/labels';
 import { dayKey, daysBetween } from '../../domain/time';
+import { periodBounds } from '../../domain/period';
 
 const W = { b: 0.5, u: 1.0, g: 1.5, d: 0.8 };
 const DEPTH_CAP = 5;
@@ -38,7 +39,7 @@ interface Graph {
   servesGoals: { confirmed: Map<string, Set<string>>; any: Map<string, Set<string>> };
 }
 
-function buildGraph(items: Item[], edges: Edge[]): Graph {
+function buildGraph(items: Item[], edges: Edge[], counting: Set<string> | null = null): Graph {
   const open = new Map(items.filter((i) => i.status === 'open').map((i) => [i.id, i]));
   const push = (m: Map<string, string[]>, k: string, v: string) => m.set(k, [...(m.get(k) ?? []), v]);
   const add = (m: Map<string, Set<string>>, k: string, v: string) => m.set(k, (m.get(k) ?? new Set()).add(v));
@@ -48,7 +49,7 @@ function buildGraph(items: Item[], edges: Edge[]): Graph {
     servesGoals: { confirmed: new Map(), any: new Map() },
   };
   for (const i of items) {
-    if (i.goal.value) {
+    if (i.goal.value && (!counting || counting.has(i.goal.value))) {
       add(g.servesGoals.any, i.id, i.goal.value);
       // A goal the item was given, by anyone, counts; an edge needs confirming.
       add(g.servesGoals.confirmed, i.id, i.goal.value);
@@ -90,8 +91,22 @@ function goalsOf(ids: Iterable<string>, serves: Map<string, Set<string>>): Set<s
   return out;
 }
 
-export function computePlan(items: Item[], edges: Edge[], now: Date, tz: string): Plan {
-  const g = buildGraph(items, edges);
+/**
+ * Brain's `Goal.counts(on:)`: an active goal counts, unless its period has
+ * already ended. Future-period goals count; open-ended ones always do.
+ */
+export function goalCounts(goal: Goal, today: string): boolean {
+  if (goal.status !== 'active') return false;
+  return !goal.period || today <= periodBounds(goal.period).through;
+}
+
+/** The ranked half of the plan. Commitments are added by the caller, never ranked. */
+export type RankedPlan = Pick<Plan, 'next' | 'ranked' | 'quickWins' | 'blocked' | 'computedAt'>;
+
+export function computePlan(items: Item[], edges: Edge[], now: Date, tz: string, goals?: Goal[]): RankedPlan {
+  const today = dayKey(now, tz);
+  const counting = goals ? new Set(goals.filter((x) => goalCounts(x, today)).map((x) => x.id)) : null;
+  const g = buildGraph(items, counting ? edges.filter((e) => e.kind !== 'serves' || counting.has(e.to)) : edges, counting);
   const candidates = [...g.open.values()].filter((i) => ACTIONABLE.has(i.type.value));
 
   const scored = candidates.map((item) => {

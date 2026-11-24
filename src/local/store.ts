@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react';
 
 /**
- * Device-only state for features the server does not have yet (marked
- * "In progress" in the UI). localStorage can be blocked or cleared, so
+ * Device-only state for things the server does not model (the timer,
+ * display preferences). localStorage can be blocked or cleared, so
  * every read and write is guarded and the app works with it empty.
  */
 export interface LocalStore<T> {

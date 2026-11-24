@@ -1,40 +1,30 @@
 import type { DayKey } from '../domain/time';
+import type { BucketId } from '../domain/board';
 import { createLocalStore } from './store';
 
 /**
- * IN PROGRESS: personal planning choices the server has no field for yet.
- * - "Not now" hides an item from today's board (today only).
- * - A planned day puts an item on a day of the week view.
- * - A manual order lets you rearrange today's board.
- * None of these change Brain's ranking. They are the kind of feedback the
- * daily review (backlog B-06d) would eventually send back as training signal.
+ * Device-only arrangement for the optional 1-3-5 board: a manual order and
+ * moves between its groups, today only. A view choice: it never changes an
+ * item's effort and never reaches Brain's ranking. Nothing else in the app
+ * reads this.
  */
-export interface PlannerState {
-  notNow: Record<DayKey, string[]>;
-  plannedDay: Record<string, DayKey>;
+export interface BoardArrangement {
   order: Record<DayKey, string[]>;
+  moved: Record<DayKey, Record<string, BucketId>>;
 }
 
-export const plannerStore = createLocalStore<PlannerState>('brain-local-planner-v1', () => ({ notNow: {}, plannedDay: {}, order: {} }));
+export const boardStore = createLocalStore<BoardArrangement>('brain-local-board-v2', () => ({ order: {}, moved: {} }));
 
-export const planner = {
-  notNow(id: string, day: DayKey) {
-    plannerStore.set((s) => ({ ...s, notNow: { [day]: [...(s.notNow[day] ?? []), id] } }));
+export const board = {
+  /** Saves a rearrangement; `to` also moves the item into another group. Today only. */
+  applyMove(day: DayKey, id: string, order: string[], to?: BucketId) {
+    boardStore.set((s) => ({
+      order: { [day]: order },
+      moved: { [day]: { ...(s.moved[day] ?? {}), ...(to ? { [id]: to } : {}) } },
+    }));
   },
-  undoNotNow(id: string, day: DayKey) {
-    plannerStore.set((s) => ({ ...s, notNow: { ...s.notNow, [day]: (s.notNow[day] ?? []).filter((x) => x !== id) } }));
-  },
-  planOn(id: string, day: DayKey | null) {
-    plannerStore.set((s) => {
-      const plannedDay = { ...s.plannedDay };
-      if (day) plannedDay[id] = day; else delete plannedDay[id];
-      return { ...s, plannedDay };
-    });
-  },
-  setOrder(day: DayKey, ids: string[]) {
-    plannerStore.set((s) => ({ ...s, order: { [day]: ids } }));
-  },
-  clearOrder(day: DayKey) {
-    plannerStore.set((s) => ({ ...s, order: { ...s.order, [day]: [] } }));
+  /** Back to Brain's order and the effort-based groups. */
+  reset() {
+    boardStore.set({ order: {}, moved: {} });
   },
 };

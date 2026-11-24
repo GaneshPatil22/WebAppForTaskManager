@@ -4,7 +4,7 @@
  * dependencies, category lexicon) are far richer; this exists so the UI has
  * something realistic to show, including abstentions and questions.
  */
-import type { Category, Effort, Item, ItemType, Span } from '../types';
+import { ITEM_TYPES, type Category, type Effort, type Item, type ItemType, type Span } from '../types';
 import { dayKey, addDaysToKey, zonedToInstant, dayOfMonthOfKey, weekdayOfKey } from '../../domain/time';
 
 export interface Extracted {
@@ -157,4 +157,52 @@ export function bestMatch(text: string, items: Item[], exclude: string): Item | 
     if (s > bestScore) { best = i; bestScore = s; }
   }
   return best;
+}
+
+// ---- ports of Brain's TitleMatcher (BrainCore/DependencyParser.swift) ----
+
+const DUP_STOP = new Set(['the', 'a', 'an', 'to', 'of', 'for', 'and', 'is', 'it', 'my', 'on', 'in', 'ka', 'ke', 'ki', 'ko', 'se', 'hai', 'karna', 'kar']);
+function words(s: string): Set<string> {
+  return new Set(s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((t) => [...t].length > 1 && !DUP_STOP.has(t)));
+}
+/** Plain Jaccard overlap, without a containment bonus. */
+export function overlap(a: string, b: string): number {
+  const x = words(a), y = words(b);
+  if (!x.size || !y.size) return 0;
+  let shared = 0;
+  for (const t of x) if (y.has(t)) shared++;
+  return shared ? shared / (x.size + y.size - shared) : 0;
+}
+function splitUrls(text: string): { urls: Set<string>; prose: string } {
+  const urls = new Set<string>();
+  for (const m of text.matchAll(/https?:\/\/\S+/gi)) urls.add(m[0].toLowerCase().replace(/^[.,;:!?)\]"']+|[.,;:!?)\]"']+$/g, ''));
+  return { urls, prose: text.replace(/https?:\/\/\S+/gi, ' ') };
+}
+/** URLs are compared whole: both sides have links, duplicates iff they share one. */
+export function duplicateScore(a: string, b: string): number {
+  const l = splitUrls(a), r = splitUrls(b);
+  if (l.urls.size && r.urls.size) return [...l.urls].some((u) => r.urls.has(u)) ? 1 : 0;
+  return overlap(l.prose, r.prose);
+}
+export const DUPLICATE_THRESHOLD = 0.7;
+/** The one open item most likely to be the same thing. Ties go to the lowest id. */
+export function bestDuplicate(title: string, candidates: Item[]): { id: string; score: number } | undefined {
+  let best: { id: string; score: number } | undefined;
+  for (const c of candidates) {
+    const v = duplicateScore(title, c.title);
+    if (v < DUPLICATE_THRESHOLD) continue;
+    if (!best || v > best.score || (v === best.score && c.id < best.id)) best = { id: c.id, score: v };
+  }
+  return best;
+}
+
+/** Brain's `typeQuestion`: asked when every tier abstains on the type. */
+export function typeQuestion(title: string): { field: 'type'; prompt: string; options: ItemType[] } {
+  const chars = [...title];
+  const trimmed = chars.length > 60 ? chars.slice(0, 60).join('') + '…' : title;
+  return {
+    field: 'type',
+    prompt: trimmed ? `What is “${trimmed}”?` : 'What kind of thing is this?',
+    options: [...ITEM_TYPES],
+  };
 }

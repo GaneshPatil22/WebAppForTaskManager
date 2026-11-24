@@ -1,0 +1,49 @@
+/* ---- week ---- */
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.wday { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-height: 180px; min-width: 0; }
+.isToday { border-color: var(--ink); }
+.past { background: transparent; }
+.wdayHead { all: unset; cursor: pointer; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.wdayHead:focus-visible { outline: 2px solid var(--rank); border-radius: 6px; }
+.wdName { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.wdNum { font-size: 20px; font-weight: 750; letter-spacing: -.02em; }
+.jDot { color: var(--faint); margin-left: auto; }
+.wBig { font-size: 13px; font-weight: 600; line-height: 1.35; }
+.wBig span { display: block; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.habitLine { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); margin-top: auto; }
+.habitBar { display: block; height: 4px; border-radius: 2px; background: var(--sched-soft); overflow: hidden; }
+.habitBar i { display: block; height: 100%; background: var(--sched); }
+.wDue { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+@media (max-width: 1000px) {
+  .week { grid-template-columns: minmax(0, 1fr); }
+  .wday { min-height: 0; }
+}
+
+/* ---- month ---- */
+.goalsBand { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 22px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.bandH { font-size: 13px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+@media (max-width: 760px) { .goalsBand { grid-template-columns: 1fr; } }
+.month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.mHead { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 0 6px 4px; }
+.mPad { min-height: 92px; }
+.mDay { all: unset; box-sizing: border-box; cursor: pointer; min-height: 92px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 6px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mDay:hover { border-color: var(--line-strong); }
+.mDay:focus-visible { outline: 2px solid var(--rank); }
+.mDay.past { background: transparent; }
+.mNum { font-weight: 700; font-size: 13px; display: flex; gap: 5px; align-items: center; color: var(--ink); }
+.mDay.past .mNum { color: var(--muted); }
+.bigDot { width: 6px; height: 6px; border-radius: 50%; background: var(--rank); display: inline-block; }
+.mItem { font-size: 11.5px; line-height: 1.3; padding: 1px 5px; border-radius: 5px; background: var(--sched-soft); color: var(--sched-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mPay { font-weight: 700; }
+.mDone { text-decoration: line-through; opacity: .6; }
+.mMore, .mDue { font-size: 11px; color: var(--muted); }
+@media (max-width: 640px) {
+  .month { gap: 2px; }
+  .mDay, .mPad { min-height: 58px; padding: 4px; border-radius: 8px; }
+  .mItem { font-size: 0; height: 5px; padding: 0; }
+  .mHead { padding: 0 2px 4px; font-size: 10px; }
+}
+
+/* ---- day detail ---- */
+.detail { display: flex; flex-direction: column; gap: 18px; }
+.dh { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 4px; }

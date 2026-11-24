@@ -1,0 +1,10 @@
+.composer { display: flex; flex-direction: column; gap: 10px; }
+.area { width: 100%; min-height: 168px; resize: vertical; border: 1px solid var(--line-strong); border-radius: 14px; padding: 14px 16px; background: var(--surface); font-size: 16px; line-height: 1.55; }
+.area:focus { outline: 2px solid var(--ink); outline-offset: -1px; border-color: transparent; }
+.area::placeholder { color: var(--faint); }
+.big { min-height: 44vh; }
+.bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hint { font-variant-numeric: tabular-nums; }
+@media (hover: none) { .hint { display: none; } }
+
+.page { max-width: 720px; }

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { QueryCache, QueryClient, QueryClientProvider, MutationCache } from '@tanstack/react-query';
 import type { Config } from '../config';
-import { createBrainClient, isApiError, MockBrainClient, type BrainClient } from '../api';
+import { createBrainClient, isApiError, type BrainClient, type MockBrainClient } from '../api';
 import { createAuthService, AuthProvider, type AuthService } from '../auth/auth';
 import { CaptureOutbox } from '../outbox/outbox';
 import { IdbOutboxStore, MemoryOutboxStore } from '../outbox/store';
@@ -17,9 +17,9 @@ export interface Services {
   mock: MockBrainClient | null;
 }
 
-export function createServices(config: Config): Services {
+export async function createServices(config: Config): Promise<Services> {
   const auth = createAuthService(config);
-  const client = createBrainClient(config, () => auth.getToken());
+  const { client, mock } = await createBrainClient(config, () => auth.getToken());
   const store = typeof indexedDB === 'undefined' ? new MemoryOutboxStore() : new IdbOutboxStore();
   const outbox = new CaptureOutbox(store, client);
 
@@ -51,7 +51,7 @@ export function createServices(config: Config): Services {
     else if (s.status === 'signedOut') { outbox.pause(); queryClient.clear(); }
   });
 
-  return { config, client, auth, outbox, queryClient, mock: client instanceof MockBrainClient ? client : null };
+  return { config, client, auth, outbox, queryClient, mock };
 }
 
 const Ctx = createContext<Services | null>(null);

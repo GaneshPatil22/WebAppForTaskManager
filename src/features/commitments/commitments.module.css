@@ -1,0 +1,30 @@
+/* Scheduled things: teal, a checkbox, no rank number. */
+.occList { display: flex; flex-direction: column; }
+.occ { display: flex; align-items: center; gap: 12px; padding: 9px 2px; border-top: 1px solid var(--line); }
+.occ:first-child { border-top: 0; }
+.box { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--sched); background: transparent; display: grid; place-items: center; cursor: pointer; flex: none; color: var(--on-fill); padding: 0; }
+.box:hover:not([disabled]) { background: var(--sched-soft); }
+.box[disabled] { cursor: default; border-color: var(--line-strong); }
+.done .box { background: var(--sched); border-color: var(--sched); }
+.occMain { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.occTitle { font-weight: 600; font-size: 15px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.note { font-weight: 600; font-size: 12.5px; color: var(--sched-ink); background: var(--sched-soft); border-radius: 6px; padding: 0 6px; }
+.occMeta { display: flex; gap: 10px; align-items: center; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+.done .occTitle { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line-strong); }
+.quiet .occTitle { color: var(--faint); }
+.occActions { display: flex; }
+.compact { padding: 5px 0; gap: 8px; border-top: 0; }
+.compact .box { width: 16px; height: 16px; border-width: 1.5px; }
+.compact .occTitle { font-size: 13px; font-weight: 500; }
+
+/* page */
+.kindGroup { margin-top: 26px; }
+.cRow { display: flex; align-items: center; gap: 12px; padding: 12px 2px; border-top: 1px solid var(--line); }
+.cRow:first-child { border-top: 0; }
+.cIcon { width: 32px; height: 32px; border-radius: 10px; background: var(--sched-soft); color: var(--sched-ink); display: grid; place-items: center; flex: none; }
+.cMain { flex: 1; min-width: 0; }
+.cTitle { font-weight: 650; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.cMeta { font-size: 13px; color: var(--muted); }
+.paused .cTitle { color: var(--muted); }
+.ruleRow { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+@media (max-width: 560px) { .ruleRow { grid-template-columns: 1fr; } }
