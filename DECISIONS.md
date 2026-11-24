@@ -96,3 +96,27 @@ end to end.
 
 The Supabase MCP in this environment belongs to a different account and
 can't see this project.
+
+### 2026-11-24 — Supabase project moved to Mumbai (written from the Server session)
+
+The project is now **`rqxvzishfcthajxejvvn`**, in **ap-south-1 (Mumbai)**.
+It replaces `evhhbfrlkxtlgnhnsipf` (Tokyo).
+
+**Why:** the server is hosted on an Oracle VM in Mumbai (ap-mumbai-1).
+Measured from that VM, every round trip to a Tokyo database took about 130 ms,
+and API requests run several queries in sequence (plan ≈ 4, item edit ≈ 6),
+so every screen would have waited 0.3–0.7 s on distance alone. Supabase can't
+move a project between regions, and the old one held no real data (one test
+login), so a new project was the cheap moment.
+
+**Checked on the new project, from outside:** its JWKS serves one **ES256
+(P-256)** key; email sign-in is on; anonymous sign-ins are off. That matches
+the server's verifier, as before.
+
+**Changed here:** only `.env.local` (gitignored): the URL and publishable
+key. No code changes.
+
+**To redo by hand in the new project:** Authentication → URL Configuration
+(Site URL and the redirect URLs `http://localhost:5173/**` and
+`http://127.0.0.1:5173/**`, plus the production address once it exists), and
+the test user. Users of the old project don't carry over.
