@@ -17,3 +17,9 @@
 .past summary { cursor: pointer; font-weight: 600; color: var(--muted); padding: 8px 0; }
 .line { display: flex; gap: 8px; align-items: center; padding: 4px 0; flex-wrap: wrap; }
 .lineTitle { font-weight: 600; }
+
+.sheet { display: flex; flex-direction: column; gap: 22px; }
+.countRow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 38px; }
+.countField { display: flex; align-items: center; gap: 8px; }
+.countField .input { width: 92px; }
+.countErr { color: var(--danger); font-size: 12.5px; }

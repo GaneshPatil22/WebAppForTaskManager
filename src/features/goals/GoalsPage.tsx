@@ -7,6 +7,8 @@ import { QueryProblem, Skeleton, errorText } from '../../ui/components';
 import { useToast } from '../../ui/toast';
 import { monthOf, monthsIn, parsePeriod, periodBounds, periodLabel, quarterOf, quarterOfMonth, shiftPeriod } from '../../domain/period';
 import type { DayKey } from '../../domain/time';
+import { CommentThread } from '../comments/CommentThread';
+import { Circles } from './Circles';
 import styles from './goals.module.css';
 
 /**
@@ -111,6 +113,7 @@ function GoalItem({ goal, goals, child = false, children }: { goal: Goal; goals:
   const toast = useToast();
   const set = (u: GoalUpdate, msg: string) => update.mutate({ id: goal.id, update: u }, { onSuccess: () => toast(msg), onError: (e) => toast(errorText(e)) });
   const closed = goal.status !== 'active';
+  const full = goal.targetCount !== undefined && (goal.doneCount ?? 0) >= goal.targetCount;
   return (
     <li className={`${styles.goal} ${child ? styles.child : ''} ${closed ? styles.closed : ''}`}>
       <div className={styles.goalRow}>
@@ -119,19 +122,57 @@ function GoalItem({ goal, goals, child = false, children }: { goal: Goal; goals:
         {child && goal.periodText ? <span className="sub">{goal.periodText}</span> : null}
         {goal.status === 'achieved' ? <span className="chip sched">Achieved</span> : goal.status === 'abandoned' ? <span className="chip">Let go</span> : null}
         <span style={{ flex: 1 }} />
-        {closed ? <button type="button" className="btn sm quiet" onClick={() => set({ status: 'active' }, 'Reopened.')}>Reopen</button> : (
-          <button type="button" className="btn sm quiet" onClick={() => set({ status: 'achieved' }, 'Achieved. Well done.')}>Achieved</button>
-        )}
+        {closed ? <button type="button" className="btn sm quiet" onClick={() => set({ status: 'active' }, 'Reopened.')}>Reopen</button>
+          // A full count goal offers "Mark achieved?" under its circles instead.
+          : full ? null : (
+            <button type="button" className="btn sm quiet" onClick={() => set({ status: 'achieved' }, 'Achieved. Well done.')}>Achieved</button>
+          )}
       </div>
+      <Circles goal={goal} />
       {children ? <ul>{children}</ul> : null}
       <Dialog open={editing} onClose={() => setEditing(false)} title="Edit goal">
-        {editing ? <EditGoal goal={goal} goals={goals} onDone={() => setEditing(false)} /> : null}
+        {editing ? (
+          <div className={styles.sheet}>
+            <EditGoal goal={goal} goals={goals} onDone={() => setEditing(false)} />
+            <CommentThread target={{ goalId: goal.id }} />
+          </div>
+        ) : null}
       </Dialog>
     </li>
   );
 }
 
-interface NewGoalDraft { title: string; period: Period | ''; parentId: string }
+interface NewGoalDraft { title: string; period: Period | ''; parentId: string; count: boolean; target: string }
+
+/** The target as a whole number 1–1000, or null if the field isn't one. */
+const targetOf = (d: NewGoalDraft): number | null => {
+  const n = Number(d.target);
+  return Number.isInteger(n) && n >= 1 && n <= 1000 ? n : null;
+};
+
+/**
+ * "Count it": opt-in. A count goal has circles to fill (6 reels, 12 runs).
+ * It counts things, never money, so the field is a plain whole number.
+ */
+function CountFields({ d, setD, done }: { d: NewGoalDraft; setD: (d: NewGoalDraft) => void; done?: number }) {
+  const bad = d.count && targetOf(d) === null;
+  return (
+    <div className={styles.countRow}>
+      <label className="check">
+        <input type="checkbox" checked={d.count} onChange={(e) => setD({ ...d, count: e.target.checked, target: d.target || '6' })} />
+        <span>Count it <span className="muted">· fill a circle each time</span></span>
+      </label>
+      {d.count ? (
+        <label className={styles.countField}>
+          <input className="input" type="number" inputMode="numeric" min={Math.max(1, done ?? 0)} max={1000} step={1} value={d.target}
+            aria-label="How many" aria-invalid={bad} onChange={(e) => setD({ ...d, target: e.target.value })} />
+          <span className="sub">times{done ? ` · ${done} filled` : ''}</span>
+        </label>
+      ) : null}
+      {bad ? <span className={styles.countErr}>A whole number from 1 to 1,000.</span> : null}
+    </div>
+  );
+}
 
 /** Periods worth offering: this and the next two months and quarters, plus any already given. */
 function periodOptions(today: DayKey, extra?: Period): Period[] {
@@ -152,14 +193,19 @@ function parentOptions(goals: Goal[], period: Period | '', self?: string): Goal[
 function GoalForm({ goals, today, initial, onDone }: { goals: Goal[]; today: DayKey; initial: Partial<NewGoalDraft>; onDone: () => void }) {
   const create = useCreateGoal();
   const toast = useToast();
-  const [d, setD] = useState<NewGoalDraft>({ title: '', period: initial.period ?? monthOf(today), parentId: '' });
+  const [d, setD] = useState<NewGoalDraft>({ title: '', period: initial.period ?? monthOf(today), parentId: '', count: false, target: '' });
   const [err, setErr] = useState<string | null>(null);
   const parents = parentOptions(goals, d.period);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!d.title.trim()) return;
-    create.mutate({ title: d.title.trim(), ...(d.period ? { period: d.period } : {}), ...(d.parentId ? { parentId: d.parentId } : {}) }, {
+    const target = d.count ? targetOf(d) : null;
+    if (d.count && target === null) return;
+    create.mutate({
+      title: d.title.trim(), ...(d.period ? { period: d.period } : {}), ...(d.parentId ? { parentId: d.parentId } : {}),
+      ...(target !== null ? { targetCount: target } : {}),
+    }, {
       onSuccess: () => { toast('Goal set.'); onDone(); },
       onError: (e2) => setErr(errorText(e2)),
     });
@@ -170,8 +216,9 @@ function GoalForm({ goals, today, initial, onDone }: { goals: Goal[]; today: Day
         <input className="input" autoFocus value={d.title} maxLength={500} placeholder="Start the iOS contract job hunt" onChange={(e) => setD({ ...d, title: e.target.value })} />
       </label>
       <PeriodFields d={d} setD={setD} today={today} parents={parents} />
+      <CountFields d={d} setD={setD} />
       {err ? <div className="banner danger">{err}</div> : null}
-      <div className="form-actions"><button type="button" className="btn quiet" onClick={onDone}>Cancel</button><button className="btn primary" disabled={!d.title.trim() || create.isPending}>Set goal</button></div>
+      <div className="form-actions"><button type="button" className="btn quiet" onClick={onDone}>Cancel</button><button className="btn primary" disabled={!d.title.trim() || (d.count && targetOf(d) === null) || create.isPending}>Set goal</button></div>
     </form>
   );
 }
@@ -201,7 +248,10 @@ function EditGoal({ goal, goals, onDone }: { goal: Goal; goals: Goal[]; onDone: 
   const update = useUpdateGoal();
   const { today } = useToday();
   const toast = useToast();
-  const [d, setD] = useState<NewGoalDraft>({ title: goal.title, period: goal.period ?? '', parentId: goal.parentId ?? '' });
+  const [d, setD] = useState<NewGoalDraft>({
+    title: goal.title, period: goal.period ?? '', parentId: goal.parentId ?? '',
+    count: goal.targetCount !== undefined, target: goal.targetCount !== undefined ? String(goal.targetCount) : '',
+  });
   const [err, setErr] = useState<string | null>(null);
   const parents = parentOptions(goals, d.period, goal.id);
 
@@ -212,6 +262,11 @@ function EditGoal({ goal, goals, onDone }: { goal: Goal; goals: Goal[]; onDone: 
     if (d.title.trim() && d.title.trim() !== goal.title) u.title = d.title.trim();
     if (d.period !== (goal.period ?? '')) { if (d.period) u.period = d.period; else clear.push('period'); }
     if (d.parentId !== (goal.parentId ?? '')) { if (d.parentId) u.parentId = d.parentId; else clear.push('parentId'); }
+    if (d.count) {
+      const target = targetOf(d);
+      if (target === null) return;
+      if (target !== goal.targetCount) u.targetCount = target;
+    } else if (goal.targetCount !== undefined) clear.push('targetCount');
     if (clear.length) u.clear = clear;
     if (!Object.keys(u).length) { onDone(); return; }
     update.mutate({ id: goal.id, update: u }, { onSuccess: () => { toast('Saved.'); onDone(); }, onError: (e2) => setErr(errorText(e2)) });
@@ -222,6 +277,7 @@ function EditGoal({ goal, goals, onDone }: { goal: Goal; goals: Goal[]; onDone: 
     <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <label className="field"><span>Goal</span><input className="input" value={d.title} maxLength={500} onChange={(e) => setD({ ...d, title: e.target.value })} /></label>
       <PeriodFields d={d} setD={setD} today={today} parents={parents} current={goal.period} />
+      <CountFields d={d} setD={setD} done={goal.doneCount} />
       {err ? <div className="banner danger">{err}</div> : null}
       <div className="form-actions">
         {goal.status === 'active' ? <button type="button" className="btn quiet" onClick={() => status('abandoned', 'Let go. It no longer counts.')}>Let it go</button> : null}

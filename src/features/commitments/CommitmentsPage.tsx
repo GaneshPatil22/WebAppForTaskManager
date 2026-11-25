@@ -3,6 +3,7 @@ import { COMMITMENT_KINDS, RULE_KINDS, WEEKDAYS, CATEGORIES, type Category, type
 import { useCommitments, useCreateCommitment, useDeleteCommitment, useGoals, useToday, useUpdateCommitment } from '../../api/queries';
 import { Icon } from '../../ui/Icon';
 import { Dialog } from '../../ui/Dialog';
+import { CommentThread } from '../comments/CommentThread';
 import { QueryProblem, Skeleton, errorText } from '../../ui/components';
 import { useToast } from '../../ui/toast';
 import { CATEGORY_LABEL, KIND_HINT, KIND_LABEL, RULE_LABEL, WEEKDAY_LABEL } from '../../domain/labels';
@@ -43,7 +44,13 @@ export function CommitmentsPage() {
         );
       })}
       <Dialog open={!!editing} onClose={() => setEditing(null)} title={editing === 'new' ? 'New commitment' : 'Edit commitment'}>
-        {editing ? <CommitmentForm c={editing === 'new' ? undefined : editing} onDone={() => setEditing(null)} /> : null}
+        {editing === 'new' ? <CommitmentForm c={undefined} onDone={() => setEditing(null)} />
+          : editing ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+              <CommitmentForm c={editing} onDone={() => setEditing(null)} />
+              <CommentThread target={{ commitmentId: editing.id }} />
+            </div>
+          ) : null}
       </Dialog>
     </>
   );

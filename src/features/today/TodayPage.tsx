@@ -146,7 +146,7 @@ function PlanTomorrow({ plan }: { plan: Plan }) {
           </>
         ) : <p className="sub">Nothing scheduled.</p>}
       </section>
-      <AddForTomorrow today={plan.day} tomorrow={tomorrow} />
+      <AddForTomorrow plan={plan} tomorrow={tomorrow} />
       <section>
         <h3 className={styles.dlgH}>Tomorrow’s big task</h3>
         {confirmed ? (
@@ -172,7 +172,8 @@ function PlanTomorrow({ plan }: { plan: Plan }) {
  * (`PlannedRunner`). If it isn't done tomorrow it stays open, shows as
  * overdue from that day, and keeps its place in Brain's ranking.
  */
-function AddForTomorrow({ today, tomorrow }: { today: DayKey; tomorrow: DayKey }) {
+function AddForTomorrow({ plan, tomorrow }: { plan: Plan; tomorrow: DayKey }) {
+  const today = plan.day;
   const { outbox } = useServices();
   const toast = useToast();
   const items = useItems();
@@ -181,8 +182,10 @@ function AddForTomorrow({ today, tomorrow }: { today: DayKey; tomorrow: DayKey }
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Filters only, in the server's own order: nothing is ranked here.
-  const open = (items.data ?? []).filter((i) => i.status === 'open' && i.dueAt.value);
+  // Only what the plan holds (ideas and notes never are), filtered by date,
+  // in the server's own item order: nothing is ranked or typed here.
+  const inPlan = new Set([...plan.ranked, ...plan.blocked].map((r) => r.item.id));
+  const open = (items.data ?? []).filter((i) => i.status === 'open' && i.dueAt.value && inPlan.has(i.id));
   const dueTomorrow = open.filter((i) => dayKey(new Date(i.dueAt.value!), tz) === tomorrow);
   const carrying = open.filter((i) => dayKey(new Date(i.dueAt.value!), tz) <= today);
 

@@ -15,8 +15,16 @@ import { periodBounds } from '../../domain/period';
 const W = { b: 0.5, u: 1.0, g: 1.5, d: 0.8 };
 const DEPTH_CAP = 5;
 
-/** Item types that are things to do. Ideas, notes and links are not ranked. */
-const ACTIONABLE = new Set(['task', 'reminder', undefined]);
+/**
+ * Brain 0.11.0 `Scoring.appearsInPlan`: the plan holds tasks, reminders,
+ * links, and items whose type is not known yet. Ideas and notes stay in the
+ * graph (they still block, serve goals and count as blockers) but are never
+ * ranked, proposed or listed as blocked.
+ */
+export function appearsInPlan(item: Item): boolean {
+  const t = item.type.value;
+  return t !== 'idea' && t !== 'note';
+}
 
 export const effortDenominator = (minutes: number) => Math.log(1 + minutes) / Math.log(1 + 20);
 
@@ -107,7 +115,7 @@ export function computePlan(items: Item[], edges: Edge[], now: Date, tz: string,
   const today = dayKey(now, tz);
   const counting = goals ? new Set(goals.filter((x) => goalCounts(x, today)).map((x) => x.id)) : null;
   const g = buildGraph(items, counting ? edges.filter((e) => e.kind !== 'serves' || counting.has(e.to)) : edges, counting);
-  const candidates = [...g.open.values()].filter((i) => ACTIONABLE.has(i.type.value));
+  const candidates = [...g.open.values()].filter(appearsInPlan);
 
   const scored = candidates.map((item) => {
     const uC = reachable(item.id, g.blocksOut.confirmed, g.open);
@@ -149,7 +157,10 @@ export function computePlan(items: Item[], edges: Edge[], now: Date, tz: string,
     if (!g.open.has(e.from) || !g.open.has(e.to)) continue;
     blockers.set(e.to, [...(blockers.get(e.to) ?? []), e.from]);
   }
+  // Blocked derives from the ranked list, so only what the plan holds; the
+  // blocker itself may be an idea or a note, and is still named.
   const blocked: BlockedItem[] = [...blockers.entries()]
+    .filter(([id]) => appearsInPlan(g.open.get(id)!))
     .map(([id, by]) => ({ item: g.open.get(id)!, blockedBy: by }))
     .sort((a, b) => a.item.id.localeCompare(b.item.id));
 

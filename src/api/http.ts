@@ -149,4 +149,30 @@ export class HttpBrainClient implements BrainClient {
   async answerQuestion(id: string, answer: Parameters<BrainClient['answerQuestion']>[1]) {
     await this.run(() => this.api.POST('/v1/questions/{id}/answer', { params: { path: { id } }, body: answer }));
   }
+
+  async listComments(target: Parameters<BrainClient['listComments']>[0]) {
+    return (await this.run(() => this.api.GET('/v1/comments', { params: { query: target } }))).data.comments;
+  }
+  async createComment(input: Parameters<BrainClient['createComment']>[0]) {
+    return (await this.run(() => this.api.POST('/v1/comments', { body: input }))).data;
+  }
+  async updateComment(id: string, update: Parameters<BrainClient['updateComment']>[1]) {
+    return (await this.run(() => this.api.PATCH('/v1/comments/{id}', { params: { path: { id } }, body: update }))).data;
+  }
+  async deleteComment(id: string) {
+    await this.run(() => this.api.DELETE('/v1/comments/{id}', { params: { path: { id } } }));
+  }
+
+  async listGoalMarks(goalId: string) {
+    return (await this.run(() => this.api.GET('/v1/goals/{id}/marks', { params: { path: { id: goalId } } }))).data.marks;
+  }
+  async addGoalMark(goalId: string, input: Parameters<BrainClient['addGoalMark']>[1]) {
+    return (await this.run(() => this.api.POST('/v1/goals/{id}/marks', { params: { path: { id: goalId } }, body: input }))).data;
+  }
+  async updateGoalMark(goalId: string, markId: string, update: Parameters<BrainClient['updateGoalMark']>[2]) {
+    return (await this.run(() => this.api.PATCH('/v1/goals/{id}/marks/{markId}', { params: { path: { id: goalId, markId } }, body: update }))).data;
+  }
+  async deleteGoalMark(goalId: string, markId: string) {
+    await this.run(() => this.api.DELETE('/v1/goals/{id}/marks/{markId}', { params: { path: { id: goalId, markId } } }));
+  }
 }

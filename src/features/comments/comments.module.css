@@ -1,0 +1,14 @@
+.thread { display: flex; flex-direction: column; gap: 8px; }
+.head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.head h3 { font-size: 14px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+.count { font-size: 11.5px; font-weight: 700; color: var(--muted); background: var(--surface2); border-radius: 999px; padding: 0 7px; line-height: 18px; }
+.list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.row { padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.row + .row { border-top: 1px solid var(--line); }
+.body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.5; }
+.meta { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--faint); min-height: 24px; }
+.compose { display: flex; flex-direction: column; gap: 6px; }
+.compose textarea { min-height: 56px; }
+.bigArea { min-height: 96px !important; }
+.composeBar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.err { color: var(--danger); font-size: 12.5px; }

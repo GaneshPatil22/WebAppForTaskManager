@@ -21,3 +21,6 @@
 /* page */
 .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
 .toolbar .search { flex: 1 1 220px; }
+
+/* item sheet: the form and its comment thread */
+.sheet { display: flex; flex-direction: column; gap: 22px; }

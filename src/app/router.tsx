@@ -11,6 +11,7 @@ import { GoalsPage } from '../features/goals/GoalsPage';
 import { CommitmentsPage } from '../features/commitments/CommitmentsPage';
 import { InboxPage } from '../features/inbox/InboxPage';
 import { ItemsPage } from '../features/items/ItemsPage';
+import { IdeasPage } from '../features/ideas/IdeasPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 
 const root = createRootRoute({
@@ -30,6 +31,7 @@ const pages: [string, () => ReactElement][] = [
   ['/goals', GoalsPage],
   ['/commitments', CommitmentsPage],
   ['/inbox', InboxPage],
+  ['/ideas', IdeasPage],
   ['/items', ItemsPage],
   ['/settings', SettingsPage],
 ];

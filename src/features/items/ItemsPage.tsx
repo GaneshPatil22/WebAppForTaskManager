@@ -8,7 +8,9 @@ import styles from './items.module.css';
 
 /**
  * Every item, open or closed, in the order they were captured (newest
- * first). Not a ranking: Today has Brain's order. Filters only.
+ * first). Not a ranking: Today has Brain's order. Filters only. Notes and
+ * ideas are never in the plan (Brain 0.11.0), so this is where notes live;
+ * ideas also have their own page.
  */
 export function ItemsPage() {
   const items = useItems();
@@ -33,6 +35,8 @@ export function ItemsPage() {
           <option value="">All types</option>
           {ITEM_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
         </select>
+        <button type="button" className="btn sm" aria-pressed={type === 'note'} onClick={() => setType(type === 'note' ? '' : 'note')}
+          title="Notes are kept, not planned, so they live here">Notes</button>
         <input className={`input ${styles.search}`} placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search items" />
       </div>
       {items.error ? <QueryProblem error={items.error} what="items" onRetry={() => void items.refetch()} /> : !items.data ? <Skeleton rows={6} /> : rows.length ? (

@@ -1,7 +1,7 @@
 import type {
   Answer, Capture, CapturePage, CaptureStatus, Commitment, CommitmentUpdate, DailyPlan, DailyPlanConfirm, Day,
   Edge, Goal, GoalUpdate, Item, ItemPage, ItemStatus, ItemUpdate, JournalEntry, Me, NewCapture, NewCommitment,
-  NewEdge, NewGoal, Occurrence, OccurrenceUpdate, Period, Plan, Question, Review, ULID,
+  NewEdge, NewGoal, Occurrence, Comment, CommentTarget, CommentUpdate, GoalMark, GoalMarkUpdate, NewComment, NewGoalMark, OccurrenceUpdate, Period, Plan, Question, Review, ULID,
 } from './types';
 
 /**
@@ -59,6 +59,20 @@ export interface BrainClient {
 
   listQuestions(): Promise<Question[]>;
   answerQuestion(id: ULID, answer: Answer): Promise<void>;
+
+  /** The user's own notes. Brain never reads them; never sent to a model. Oldest first. */
+  listComments(target: CommentTarget): Promise<Comment[]>;
+  /** Idempotent on `id`, so it can go through an outbox. */
+  createComment(input: NewComment): Promise<Comment>;
+  updateComment(id: ULID, update: CommentUpdate): Promise<Comment>;
+  deleteComment(id: ULID): Promise<void>;
+
+  /** A count goal's filled circles, oldest day first. */
+  listGoalMarks(goalId: ULID): Promise<GoalMark[]>;
+  /** Idempotent on `id`. Day defaults to the user's today. */
+  addGoalMark(goalId: ULID, input: NewGoalMark): Promise<GoalMark>;
+  updateGoalMark(goalId: ULID, markId: ULID, update: GoalMarkUpdate): Promise<GoalMark>;
+  deleteGoalMark(goalId: ULID, markId: ULID): Promise<void>;
 }
 
 export interface DayRange {

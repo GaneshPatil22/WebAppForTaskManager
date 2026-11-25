@@ -11,14 +11,31 @@ import {
 } from '../../api/queries';
 import { CATEGORY_LABEL, EFFORT_SHORT, TYPE_LABEL, confidenceWord } from '../../domain/labels';
 import { fromLocalInput, toLocalInput } from '../../domain/time';
+import { CommentThread } from '../comments/CommentThread';
 import styles from './items.module.css';
 
 export function ItemEditor({ id, onClose }: { id: string | null; onClose: () => void }) {
   const byId = useItemsById();
   const item = id ? byId.get(id) : undefined;
   return (
-    <Dialog open={!!id} onClose={onClose} title={item ? 'Item' : 'Item'} wide>
-      {item ? <EditorBody key={item.id + item.updatedAt} item={item} onClose={onClose} /> : <p className="muted">This item isn’t loaded.</p>}
+    <Dialog open={!!id} onClose={onClose} title={item?.type.value === 'idea' ? 'Idea' : 'Item'} wide>
+      {item ? (
+        // The thread sits outside the form (a form can't hold another) and
+        // outside EditorBody's key, so a draft survives the item updating.
+        // On an idea it is the main content: research notes, first.
+        item.type.value === 'idea' ? (
+          <div className={styles.sheet}>
+            <CommentThread target={{ itemId: item.id }} title="Research notes" big
+              placeholder="What you found, links, open questions…" empty="Nothing yet. Collect what you find here until it’s ready to be a task." />
+            <EditorBody key={item.id + item.updatedAt} item={item} onClose={onClose} />
+          </div>
+        ) : (
+          <div className={styles.sheet}>
+            <EditorBody key={item.id + item.updatedAt} item={item} onClose={onClose} />
+            <CommentThread target={{ itemId: item.id }} />
+          </div>
+        )
+      ) : <p className="muted">This item isn’t loaded.</p>}
     </Dialog>
   );
 }
@@ -123,6 +140,9 @@ function EditorBody({ item, onClose }: { item: Item; onClose: () => void }) {
         {item.status === 'open' ? (
           <>
             <button type="button" className="btn quiet" onClick={() => send({ status: 'dropped' }, 'Dropped.')}>Drop</button>
+            {item.type.value === 'idea' ? (
+              <button type="button" className="btn" onClick={() => send({ type: 'task' }, MADE_TASK)}>Make it a task</button>
+            ) : null}
             <button type="button" className="btn" onClick={() => send({ status: 'done' }, 'Done.')}>Mark done</button>
           </>
         ) : <button type="button" className="btn" onClick={() => send({ status: 'open' }, 'Reopened.')}>Reopen</button>}
@@ -133,6 +153,8 @@ function EditorBody({ item, onClose }: { item: Item; onClose: () => void }) {
     </form>
   );
 }
+
+export const MADE_TASK = 'Now a task. It joins Brain’s plan when the plan refreshes.';
 
 function Field({ label, who, children }: { label: string; who: ReactNode; children: ReactNode }) {
   return <label className="field"><span>{label} {who}</span>{children}</label>;

@@ -4,7 +4,7 @@ import { ulid } from 'ulid';
 import { isApiError, listAll, type DayRange } from './client';
 import type {
   Capture, Commitment, CommitmentUpdate, Day, Edge, Goal, GoalUpdate, Item, ItemUpdate, NewCommitment, NewEdge,
-  ItemType, NewGoal, OccurrenceState, Plan, Question,
+  Comment, CommentTarget, ItemType, NewGoal, OccurrenceState, Plan, Question,
 } from './types';
 import { useServices } from '../app/services';
 import { dayKey, type DayKey } from '../domain/time';
@@ -411,5 +411,85 @@ export function useUpdateTimezone() {
   return useMutation({
     mutationFn: (tz: string) => client.updateMe(tz),
     onSuccess: (me) => { qc.setQueryData(K.me, me); void invalidate(); },
+  });
+}
+
+// ---------- comments (S7): the user's own notes ----------
+const commentKey = (t: CommentTarget) => ['comments', ...Object.entries(t)[0]!] as const;
+
+export function useComments(target: CommentTarget) {
+  const { client } = useServices();
+  return useQuery({ queryKey: commentKey(target), queryFn: () => client.listComments(target) });
+}
+
+export function useUpdateComment(target: CommentTarget) {
+  const { client } = useServices();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: string }) => client.updateComment(id, { body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: commentKey(target) }),
+  });
+}
+
+export function useDeleteComment(target: CommentTarget) {
+  const { client } = useServices();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => client.deleteComment(id),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: commentKey(target) });
+      const before = qc.getQueryData<Comment[]>(commentKey(target));
+      if (before) qc.setQueryData<Comment[]>(commentKey(target), before.filter((c) => c.id !== id));
+      return { before };
+    },
+    onError: (_e, _v, ctx) => { if (ctx?.before) qc.setQueryData(commentKey(target), ctx.before); },
+    onSettled: () => qc.invalidateQueries({ queryKey: commentKey(target) }),
+  });
+}
+
+// ---------- count goals (S7): circles, never money ----------
+const marksKey = (goalId: string) => ['goalMarks', goalId] as const;
+
+export function useGoalMarks(goalId: string, enabled = true) {
+  const { client } = useServices();
+  return useQuery({ queryKey: marksKey(goalId), queryFn: () => client.listGoalMarks(goalId), enabled });
+}
+
+/** A circle changes the goal's `doneCount` too, which goals and review show. */
+function useInvalidateMarks() {
+  const qc = useQueryClient();
+  return (goalId: string) => Promise.all([
+    qc.invalidateQueries({ queryKey: marksKey(goalId) }),
+    qc.invalidateQueries({ queryKey: K.goals }),
+    qc.invalidateQueries({ queryKey: K.review }),
+  ]);
+}
+
+export function useAddGoalMark() {
+  const { client } = useServices();
+  const invalidate = useInvalidateMarks();
+  return useMutation({
+    mutationFn: ({ goalId, day, note }: { goalId: string; day?: string | undefined; note?: string | undefined }) =>
+      client.addGoalMark(goalId, { id: ulid(), ...(day ? { day } : {}), ...(note ? { note } : {}) }),
+    onSettled: (_r, _e, v) => invalidate(v.goalId),
+  });
+}
+
+export function useUpdateGoalMark() {
+  const { client } = useServices();
+  const invalidate = useInvalidateMarks();
+  return useMutation({
+    mutationFn: ({ goalId, markId, note }: { goalId: string; markId: string; note: string }) =>
+      client.updateGoalMark(goalId, markId, note ? { note } : { clear: ['note'] }),
+    onSettled: (_r, _e, v) => invalidate(v.goalId),
+  });
+}
+
+export function useDeleteGoalMark() {
+  const { client } = useServices();
+  const invalidate = useInvalidateMarks();
+  return useMutation({
+    mutationFn: ({ goalId, markId }: { goalId: string; markId: string }) => client.deleteGoalMark(goalId, markId),
+    onSettled: (_r, _e, v) => invalidate(v.goalId),
   });
 }

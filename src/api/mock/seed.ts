@@ -110,6 +110,9 @@ export function seedDb(now: Date, tz: string): MockDb {
   mk('Pay society maintenance', { type: 'task', effort: 'tiny', status: 'done' });
   mk('idea: import my WhatsApp-to-self messages as captures', { type: 'idea', title: 'Import my WhatsApp-to-self messages as captures' });
   mk('Hummingbird 2 docs: routing and middleware', { type: 'link', typeBy: 't2' });
+  mk('what if CoreLearnly had a graph visualiser for BFS and DFS', { type: 'idea', title: 'What if CoreLearnly had a graph visualiser for BFS and DFS' });
+  mk('idea: a weekly email from Brain with what I dropped', { type: 'idea', title: 'A weekly email from Brain with what I dropped' });
+  mk('note: old flat deposit 40k, landlord said January', { type: 'note', title: 'Old flat deposit 40k, landlord said January' });
   mk('that pricing thing', { effort: 'medium' });
   mk('Shreya’s number for the venue');
 

@@ -25,9 +25,10 @@ import {
   type DailyPlanConfirm, type Edge, type Goal, type GoalUpdate, type Item, type ItemStatus, type ItemUpdate,
   type JournalEntry, type Me, type NewCapture, type NewCommitment, type NewEdge, type NewGoal, type Occurrence,
   type OccurrenceState, type OccurrenceUpdate, type Plan, type Question, type Review, type ScheduledCommitment,
+  type Comment, type CommentTarget, type CommentUpdate, type GoalMark, type GoalMarkUpdate, type NewComment, type NewGoalMark,
   COMMITMENT_KINDS, CATEGORIES,
 } from '../types';
-import { computePlan, wouldCycle } from './scoring';
+import { appearsInPlan, computePlan, wouldCycle } from './scoring';
 import { bestDuplicate, bestMatch, extract, typeQuestion } from './enrich';
 import { days, falls, hitRate, next, ruleText, scheduledOn, streak, validRule } from './recurrence';
 import { seedDb } from './seed';
@@ -65,6 +66,9 @@ export interface MockDb {
   journal: JournalEntry[];
   dailyPlans: DailyPlan[];
   questions: StoredQuestion[];
+  /** M0007. Added after v3 shipped; filled in on load if missing. */
+  comments: Comment[];
+  marks: GoalMark[];
 }
 
 export interface MockOptions {
@@ -118,8 +122,8 @@ export class MockBrainClient implements BrainClient {
       const raw = localStorage.getItem(this.opt.storageKey);
       const db = raw ? (JSON.parse(raw) as MockDb) : null;
       // v2 had no questions; everything else is the same shape.
-      if ((db?.version as number) === 2) return { ...db!, version: 3, questions: [] };
-      return db?.version === 3 ? db : null;
+      if ((db?.version as number) === 2) return { ...db!, version: 3, questions: [], comments: [], marks: [] };
+      return db?.version === 3 ? { ...db, comments: db.comments ?? [], marks: db.marks ?? [] } : null;
     } catch { return null; }
   }
   private save() {
@@ -315,10 +319,22 @@ export class MockBrainClient implements BrainClient {
   }
 
   // ---------- goals ----------
+  /** As the server sends it: `doneCount` exactly when there is a `targetCount`. */
+  private goalJson(g: Goal): Goal {
+    const { doneCount: _d, ...rest } = g;
+    const out: Goal = g.period ? { ...rest, periodText: periodLabel(g.period) } : { ...rest };
+    if (g.targetCount !== undefined) out.doneCount = this.db.marks.filter((m) => m.goalId === g.id).length;
+    return out;
+  }
+  /** A whole number of things, 1–1000. Never an amount. */
+  private checkTarget(n: number) {
+    if (!Number.isInteger(n) || n < 1 || n > 1000) this.invalid('a target count is between 1 and 1000', 'invalid_target');
+    return n;
+  }
   listGoals(period?: string) {
     return this.call(() => {
       if (period !== undefined && !parsePeriod(period)) this.invalid('period must be YYYY-MM or YYYY-Qn', 'invalid_period');
-      return this.db.goals.filter((g) => period === undefined || g.period === period).map(goalJson);
+      return this.db.goals.filter((g) => period === undefined || g.period === period).map((g) => this.goalJson(g));
     });
   }
   /** A month goal may roll up only into the quarter containing it (`Goal.canRollUp`). */
@@ -336,15 +352,17 @@ export class MockBrainClient implements BrainClient {
       this.text(input.title, 'title', 500);
       if (input.period !== undefined && !parsePeriod(input.period)) this.invalid('period must be YYYY-MM or YYYY-Qn', 'invalid_period');
       if (input.parentId !== undefined) this.checkId(input.parentId, 'parentId');
+      if (input.targetCount !== undefined) this.checkTarget(input.targetCount);
       const existing = this.db.goals.find((g) => g.id === input.id);
-      if (existing) return goalJson(existing);
+      if (existing) return this.goalJson(existing);
       const g: Goal = {
         id: input.id, title: input.title, status: 'active', createdAt: this.nowIso(),
         ...(input.period ? { period: input.period } : {}), ...(input.parentId ? { parentId: input.parentId } : {}),
+        ...(input.targetCount !== undefined ? { targetCount: input.targetCount } : {}),
       };
       this.checkRollUp(g);
       this.db.goals.push(g);
-      return goalJson(g);
+      return this.goalJson(g);
     });
   }
   updateGoal(id: string, u: GoalUpdate) {
@@ -352,7 +370,8 @@ export class MockBrainClient implements BrainClient {
       this.checkId(id);
       const stored = this.db.goals.find((x) => x.id === id) ?? this.notFound('No such goal.');
       const clear = new Set(u.clear ?? []);
-      if ((clear.has('period') && u.period !== undefined) || (clear.has('parentId') && u.parentId !== undefined)) {
+      if ((clear.has('period') && u.period !== undefined) || (clear.has('parentId') && u.parentId !== undefined)
+        || (clear.has('targetCount') && u.targetCount !== undefined)) {
         this.invalid('a field is both sent and cleared', 'conflicting_clear');
       }
       const g: Goal = { ...stored };
@@ -366,9 +385,17 @@ export class MockBrainClient implements BrainClient {
       if (clear.has('period')) delete g.period;
       if (clear.has('parentId')) delete g.parentId;
       this.checkRollUp(g);
+      // The count first, as the server does: it can be refused, and a refusal
+      // leaves the whole goal unchanged.
+      if (u.targetCount !== undefined || clear.has('targetCount')) {
+        const target = u.targetCount !== undefined ? this.checkTarget(u.targetCount) : undefined;
+        const done = this.db.marks.filter((m) => m.goalId === id).length;
+        if (done > (target ?? 0)) this.invalid(`${done} circle${done === 1 ? ' is' : 's are'} filled; empty some first`, 'target_below_done');
+        if (target === undefined) delete g.targetCount; else g.targetCount = target;
+      }
       Object.keys(stored).forEach((k) => delete (stored as Record<string, unknown>)[k]);
       Object.assign(stored, g);
-      return goalJson(stored);
+      return this.goalJson(stored);
     });
   }
 
@@ -628,7 +655,12 @@ export class MockBrainClient implements BrainClient {
       }
       const item = this.db.items.find((i) => i.id === input.itemId) ?? this.notFound('No such item.');
       if (item.status !== 'open') this.invalid('that item is already finished', 'item_not_open');
-      if (input.proposedItemId && !this.db.items.some((i) => i.id === input.proposedItemId)) this.notFound('No such item.');
+      // Brain's own rule, checked on write as the server does (0.11.0).
+      if (!appearsInPlan(item)) this.invalid('ideas and notes are not planned; make it a task first', 'item_not_actionable');
+      if (input.proposedItemId) {
+        const proposed = this.db.items.find((i) => i.id === input.proposedItemId) ?? this.notFound('No such item.');
+        if (!appearsInPlan(proposed)) this.invalid('Brain does not propose ideas or notes as the big task', 'item_not_actionable');
+      }
       const existing = this.db.dailyPlans.find((p) => p.day === day);
       if (existing && existing.itemId === input.itemId && existing.proposedItemId === input.proposedItemId) return existing;
       const swapped = input.proposedItemId ? input.proposedItemId !== input.itemId : false;
@@ -678,7 +710,7 @@ export class MockBrainClient implements BrainClient {
       }
       const goals = this.db.goals
         .filter((g) => g.period && periodBounds(g.period).from <= through && periodBounds(g.period).through >= from)
-        .map((g) => ({ goal: goalJson(g), children: this.db.goals.filter((c) => c.parentId === g.id).map(goalJson) }));
+        .map((g) => ({ goal: this.goalJson(g), children: this.db.goals.filter((c) => c.parentId === g.id).map((g) => this.goalJson(g)) }));
       const plans = this.db.dailyPlans.filter((p) => p.day >= from && p.day <= through);
       return {
         from, through, commitments, goals,
@@ -737,6 +769,118 @@ export class MockBrainClient implements BrainClient {
     });
   }
 
+  // ---------- comments (M0007): the user's own notes, never read by Brain ----------
+  /** Exactly one target, as `Validation.commentTarget`. */
+  private commentTarget(t: Partial<{ itemId: string; goalId: string; commitmentId: string }>): CommentTarget {
+    const named = [t.itemId, t.goalId, t.commitmentId].filter((x) => x !== undefined);
+    if (named.length !== 1) this.invalid('name exactly one of itemId, goalId or commitmentId', 'one_target');
+    if (t.itemId !== undefined) { this.checkId(t.itemId, 'itemId'); return { itemId: t.itemId }; }
+    if (t.goalId !== undefined) { this.checkId(t.goalId, 'goalId'); return { goalId: t.goalId }; }
+    this.checkId(t.commitmentId!, 'commitmentId');
+    return { commitmentId: t.commitmentId! };
+  }
+  private onTarget(c: Comment, t: CommentTarget) {
+    return 'itemId' in t ? c.itemId === t.itemId : 'goalId' in t ? c.goalId === t.goalId : c.commitmentId === t.commitmentId;
+  }
+  /** Oldest first. A target that doesn't exist simply has none. */
+  listComments(target: CommentTarget) {
+    return this.call(() => {
+      const t = this.commentTarget(target);
+      return this.db.comments.filter((c) => this.onTarget(c, t))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+    });
+  }
+  createComment(input: NewComment) {
+    return this.call(() => {
+      this.checkId(input.id);
+      const t = this.commentTarget(input);
+      this.text(input.body, 'body', 2000);
+      const existing = this.db.comments.find((c) => c.id === input.id);
+      if (existing) return existing;
+      const exists = 'itemId' in t ? this.db.items.some((i) => i.id === t.itemId)
+        : 'goalId' in t ? this.db.goals.some((g) => g.id === t.goalId)
+        : this.db.commitments.some((c) => c.id === t.commitmentId); // archived ones too
+      if (!exists) this.notFound('No such item, goal or commitment.');
+      const now = this.nowIso();
+      const c: Comment = { id: input.id, ...t, body: input.body, createdAt: now, updatedAt: now };
+      this.db.comments.push(c);
+      return c;
+    });
+  }
+  updateComment(id: string, u: CommentUpdate) {
+    return this.call(() => {
+      this.checkId(id);
+      this.text(u.body, 'body', 2000);
+      const c = this.db.comments.find((x) => x.id === id) ?? this.notFound('No such comment.');
+      c.body = u.body;
+      c.updatedAt = this.nowIso();
+      return c;
+    });
+  }
+  deleteComment(id: string) {
+    return this.call(() => {
+      this.checkId(id);
+      if (!this.db.comments.some((x) => x.id === id)) this.notFound('No such comment.');
+      this.db.comments = this.db.comments.filter((x) => x.id !== id);
+    });
+  }
+
+  // ---------- count goals (M0007): circles, never money ----------
+  private marksOf(goalId: string) {
+    return this.db.marks.filter((m) => m.goalId === goalId)
+      .sort((a, b) => a.day.localeCompare(b.day) || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  }
+  listGoalMarks(goalId: string) {
+    return this.call(() => {
+      this.checkId(goalId);
+      if (!this.db.goals.some((g) => g.id === goalId)) this.notFound('No such goal.');
+      return this.marksOf(goalId);
+    });
+  }
+  /** Fills one circle. Idempotent on id; filling the last one does not achieve the goal. */
+  addGoalMark(goalId: string, input: NewGoalMark) {
+    return this.call(() => {
+      this.checkId(goalId);
+      this.checkId(input.id, 'markId');
+      if (input.day !== undefined) this.checkDay(input.day, 'day');
+      if (input.note !== undefined) this.text(input.note, 'note', 500);
+      const today = this.today();
+      const day = input.day ?? today;
+      if (daysBetween(today, day) > 0) this.invalid('a circle is filled on a day that has come', 'in_future');
+      const goal = this.db.goals.find((g) => g.id === goalId) ?? this.notFound('No such goal.');
+      const existing = this.db.marks.find((m) => m.id === input.id);
+      if (existing) return existing;
+      if (goal.targetCount === undefined) this.invalid('this goal has no target count, so no circles to fill', 'not_a_count_goal');
+      if (this.marksOf(goalId).length >= goal.targetCount) throw new ApiError(409, 'target_reached', 'every circle is filled; raise the target to add more');
+      const now = this.nowIso();
+      const m: GoalMark = { id: input.id, goalId, day: day as DayKey, ...(input.note !== undefined ? { note: input.note } : {}), createdAt: now, updatedAt: now };
+      this.db.marks.push(m);
+      return m;
+    });
+  }
+  updateGoalMark(goalId: string, markId: string, u: GoalMarkUpdate) {
+    return this.call(() => {
+      const clearNote = (u.clear ?? []).includes('note');
+      if (clearNote && u.note !== undefined) this.invalid('a field is both sent and cleared', 'conflicting_clear');
+      this.checkId(goalId);
+      this.checkId(markId, 'markId');
+      if (u.note !== undefined) this.text(u.note, 'note', 500);
+      const m = this.db.marks.find((x) => x.id === markId && x.goalId === goalId) ?? this.notFound('No such circle.');
+      if (u.note === undefined && !clearNote) return m;
+      if (clearNote) delete m.note; else m.note = u.note!;
+      m.updatedAt = this.nowIso();
+      return m;
+    });
+  }
+  deleteGoalMark(goalId: string, markId: string) {
+    return this.call(() => {
+      this.checkId(goalId);
+      this.checkId(markId, 'markId');
+      if (!this.db.marks.some((x) => x.id === markId && x.goalId === goalId)) this.notFound('No such circle.');
+      this.db.marks = this.db.marks.filter((x) => x.id !== markId);
+    });
+  }
+
   // ---------- questions (T3) ----------
   /** Unanswered, newest first, at most 50. */
   listQuestions(): Promise<Question[]> {
@@ -773,9 +917,6 @@ export class MockBrainClient implements BrainClient {
   }
 }
 
-function goalJson(g: Goal): Goal {
-  return g.period ? { ...g, periodText: periodLabel(g.period) } : { ...g };
-}
 
 function canRollUp(child: Goal, parent: Goal): boolean {
   if (child.id === parent.id || !child.period || !parent.period) return false;
@@ -795,6 +936,6 @@ export function emptyDb(tz: string): MockDb {
   return {
     version: 3, me: { userId: '7d9f3c1e-2b4a-4c6d-9e8f-0a1b2c3d4e5f', timezone: tz },
     captures: [], items: [], goals: [], edges: [], rejected: [], corrections: [],
-    commitments: [], occurrences: [], journal: [], dailyPlans: [], questions: [],
+    commitments: [], occurrences: [], journal: [], dailyPlans: [], questions: [], comments: [], marks: [],
   };
 }

@@ -132,6 +132,7 @@ function GoalReviewLine({ goal, today }: { goal: Goal; today: DayKey }) {
       <Icon name={goal.status === 'achieved' ? 'check' : 'goal'} size={15} />
       <span className={styles.goalTitle}>{goal.title}</span>
       {goal.periodText ? <span className="sub">{goal.periodText}</span> : null}
+      {goal.targetCount !== undefined ? <span className="chip sched">{goal.doneCount ?? 0} of {goal.targetCount}</span> : null}
       <span style={{ flex: 1 }} />
       {goal.status === 'active' ? (
         <>

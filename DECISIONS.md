@@ -312,3 +312,90 @@ non-goals.
   part-way) gets a row with its clock, pause/resume and stop: in the sidebar
   on wide screens, as chips pinned above the bottom bar on phones. The top-bar
   button only opens the timer and shows a dot while any runs.
+
+### 2026-11-25 — W6: an Ideas tab, plan membership by type (Server 46b31a4, Brain 0.11.0)
+
+Brain 0.11.0 keeps open ideas and notes out of `/v1/plan` (ranked, next,
+quick wins, blocked); tasks, reminders, links and untyped items stay in. The
+big-task confirm refuses an idea or note as either id (`item_not_actionable`).
+`api:gen` changed only that description.
+
+**Today shows only the plan.** The ranked list, quick wins, waiting, the big
+task and its picker already came only from `/v1/plan`. The one client-built
+list on Today, Plan tomorrow's "due tomorrow / carrying over", filtered
+`/v1/items`; it now keeps only items the plan holds (`ranked` ∪ `blocked`),
+rather than copying Brain's type rule into the client. So
+`item_not_actionable` (in `errors.ts`) should never fire from this UI.
+
+**Ideas tab** (`/ideas`, in Captured on desktop, under More on phones so the
+bottom bar stays five slots): open ideas from `/v1/items`, newest first, with
+any goal (marked if guessed) and age. "Make it a task" is
+`PATCH {type: "task"}`, the user's decision; it leaves the page at once and
+joins Today only when the plan is refetched — never inserted client-side. Drop
+is the normal status change, with Undo. The actions sit on the page, not the
+row, because the row unmounts as soon as the list updates and would drop its
+own success callback (the toast). The item sheet also offers "Make it a task"
+for an idea, and has an empty `IdeaComments` slot for the comments step; no
+comments are built.
+
+**Notes** were never reachable only through Today: Inbox (captures) and All
+items both read `/v1/items`. All items gets a one-tap "Notes" filter; no new
+tab. The size chip now shows on links (planned again, with a real duration),
+not on ideas or notes.
+
+**Mock.** `scoring.ts` used `task | reminder | unknown`, wrongly excluding
+links; it now ports `Scoring.appearsInPlan` exactly (only idea and note out).
+Blocked lists only plan members but still names an idea as a blocker. The
+mock's confirm returns `item_not_actionable` for either id, in the server's
+order (after `item_not_open`; proposed: 404 before not-actionable). Tests for
+each. The seed gained two ideas and a note.
+
+### 2026-11-25 — W7: comments and count circles (Server 69541db)
+
+**Comments** are the user's own notes on an item, goal or commitment; Brain
+never reads them. One `CommentThread` serves all three: in the item sheet
+(on an idea it comes first, titled "Research notes", as the idea's main
+content), the goal sheet and the commitment sheet. It sits outside each form
+(a form can't hold another) and outside the item editor's remount key, so a
+half-written note survives the item updating.
+
+- **New comments go through an outbox**, as captures do: the server is
+  idempotent on the comment's id. The outbox core is now generic
+  (`Outbox<E, R>`: store first, send in order, backoff, pause while signed
+  out); `CaptureOutbox` is the same class it was on top of it, and its tests
+  are unchanged. `CommentOutbox` has its own IndexedDB database
+  (`brain-comment-outbox`) so neither ever migrates the other, and treats 404
+  (the thing was deleted) as a refusal to show, not to retry. Waiting
+  comments show in their thread, even when the thread's list can't load.
+- **Edits and deletes are plain requests**: they change what the server
+  already has, and an edit queued offline could overwrite a newer one.
+- **No counts on rows.** There is no endpoint for comment counts across many
+  targets, and one request per row is not cheap; the count shows in each
+  detail view's thread header.
+
+**Count goals.** "Count it" is an opt-in toggle with a whole-number field
+(1–1000) in the goal form; turning it off on an existing goal sends
+`clear: ["targetCount"]`. A count goal shows `targetCount` circles,
+`doneCount` filled in the order filled (marks are fetched only for goals
+with any), with "2 of 6 · Q4 2026" beside them; past 40 it is a bar with
+"Fill one". Tap an empty circle: fill it for today, or an earlier day, with
+an optional note. Tap a filled one: see or change its note, or empty it. A
+noted circle has an inner ring. Filling the last circle never achieves the
+goal: "All N done · Mark achieved?" appears as its own tap (and replaces the
+row's usual Achieved button while it shows). `target_reached` says "All N
+done. Raise the target to add more." Month and Review show "2 of 6" as text.
+Counts are things, never money: no currency, units or totals anywhere.
+
+**Errors.** `errors.ts` gains `one_target`, `not_a_count_goal`,
+`target_reached`, `target_below_done`, `invalid_target`, and the field codes
+the server derives (`empty_body`, `body_too_long`, `empty_note`,
+`note_too_long`).
+
+**Mock.** Ports `APIHandler+Comments.swift` and `UserStore+Comments.swift`:
+exactly one target or `one_target`; 404 for a target that doesn't exist
+(archived commitments count as existing); oldest first by created time then
+id; marks idempotent on id before the target checks; `in_future`,
+`not_a_count_goal`, 409 `target_reached`; target changes checked before the
+rest of the goal is saved, so `target_below_done` leaves the goal unchanged;
+`doneCount` on every goal response, review included. Stored mock data gains
+empty `comments` and `marks` on load. The seed still has no goals.

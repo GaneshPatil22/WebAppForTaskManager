@@ -38,9 +38,10 @@ export function ItemRow({ item, lead, actions, reason, showType }: {
 }) {
   const open = useOpenItem();
   const closed = item.status !== 'open';
-  // Notes, ideas and links have no size unless Brain gave them one.
+  // Notes and ideas aren't planned, so they get no size unless they have one.
+  // A link is "read this": it is planned and has a real duration.
   const sized = !!item.effort.value && item.effort.value !== 'unknown';
-  const sizeChip = !closed && (sized || !['note', 'idea', 'link'].includes(item.type.value ?? ''));
+  const sizeChip = !closed && (sized || !['note', 'idea'].includes(item.type.value ?? ''));
   return (
     <div className={`${styles.row} ${closed ? styles.closed : ''}`}>
       {lead}

@@ -57,6 +57,15 @@ export type CommitmentReview = S['CommitmentReview'];
 export type GoalReview = S['GoalReview'];
 export type Review = S['Review'];
 export type Answer = S['Answer'];
+export type NewComment = S['NewComment'];
+export type CommentUpdate = S['CommentUpdate'];
+export type Comment = S['Comment'];
+export type NewGoalMark = S['NewGoalMark'];
+export type GoalMarkUpdate = S['GoalMarkUpdate'];
+export type GoalMark = S['GoalMark'];
+
+/** What a comment is written against: exactly one. */
+export type CommentTarget = { itemId: ULID } | { goalId: ULID } | { commitmentId: ULID };
 
 export const ITEM_TYPES: readonly ItemType[] = ['task', 'idea', 'note', 'reminder', 'link'];
 export const ITEM_STATUSES: readonly ItemStatus[] = ['open', 'done', 'dropped'];

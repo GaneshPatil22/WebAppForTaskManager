@@ -127,3 +127,54 @@ describe('journal', () => {
     await expect(c.writeJournal('2026-11-25', 'later')).rejects.toMatchObject({ code: 'in_future' });
   });
 });
+
+describe('what the plan holds (Brain 0.11.0)', () => {
+  const add = async (c: MockBrainClient, text: string) => {
+    const id = ulid();
+    await c.createCapture({ id, text });
+    await new Promise((r) => setTimeout(r, 5));
+    return (await c.listItems()).items.find((i) => i.captureId === id)!;
+  };
+
+  it('ranks tasks, reminders, links and untyped items; never ideas or notes', async () => {
+    const c = client();
+    const task = await add(c, 'call the plumber');
+    const link = await add(c, 'https://example.com/swift-concurrency');
+    const untyped = await add(c, 'that pricing thing');
+    const idea = await add(c, 'idea: reels on graph algorithms');
+    const note = await add(c, 'note: landlord deposit was 40k');
+    expect([task.type.value, link.type.value, untyped.type.value, idea.type.value, note.type.value]).toEqual(['task', 'link', undefined, 'idea', 'note']);
+    const plan = await c.getPlan();
+    const ids = new Set([...plan.ranked, ...plan.quickWins].map((r) => r.item.id));
+    expect(ids.has(task.id) && ids.has(link.id) && ids.has(untyped.id)).toBe(true);
+    expect(ids.has(idea.id) || ids.has(note.id)).toBe(false);
+    expect(plan.next?.item.type.value).not.toBe('idea');
+    // /v1/items still returns everything.
+    expect((await c.listItems()).items.map((i) => i.id)).toEqual(expect.arrayContaining([idea.id, note.id]));
+  });
+
+  it('an open idea still blocks a task and is named as its blocker, but is never listed as blocked', async () => {
+    const c = client();
+    const idea = await add(c, 'idea: pick a backend language');
+    const task = await add(c, 'write the API skeleton');
+    const blockedIdea = await add(c, 'idea: a CLI for Brain');
+    const e1 = await c.createEdge({ id: ulid(), from: idea.id, to: task.id, kind: 'blocks' });
+    const e2 = await c.createEdge({ id: ulid(), from: task.id, to: blockedIdea.id, kind: 'blocks' });
+    expect(e1.confirmed && e2.confirmed).toBe(true);
+    const plan = await c.getPlan();
+    expect(plan.blocked).toEqual([expect.objectContaining({ item: expect.objectContaining({ id: task.id }), blockedBy: [idea.id] })]);
+  });
+
+  it('refuses an idea or a note as the big task, or as Brain’s proposal', async () => {
+    const c = client();
+    const task = await add(c, 'call the plumber');
+    const idea = await add(c, 'idea: reels on graph algorithms');
+    const note = await add(c, 'note: landlord deposit was 40k');
+    await expect(c.confirmDailyPlan('2026-11-24', { itemId: idea.id, proposedItemId: task.id })).rejects.toMatchObject({ status: 400, code: 'item_not_actionable' });
+    await expect(c.confirmDailyPlan('2026-11-24', { itemId: task.id, proposedItemId: note.id })).rejects.toMatchObject({ status: 400, code: 'item_not_actionable' });
+    // Made a task, an idea is planned like any other.
+    await c.updateItem(idea.id, { type: 'task' });
+    expect((await c.getPlan()).ranked.some((r) => r.item.id === idea.id)).toBe(true);
+    await expect(c.confirmDailyPlan('2026-11-24', { itemId: idea.id, proposedItemId: task.id })).resolves.toMatchObject({ swapped: true });
+  });
+});

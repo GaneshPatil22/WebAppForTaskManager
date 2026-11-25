@@ -145,9 +145,95 @@ export interface paths {
          * @description A month goal may name a quarter goal as its parent only if that
          *     quarter contains the month; anything else is 400 `invalid_rollup`.
          *     Changing a quarter's period is refused the same way if a month goal
-         *     rolling up into it would no longer fit.
+         *     rolling up into it would no longer fit. `targetCount` makes it a
+         *     count goal; lowering it below the circles already filled, or clearing
+         *     it while any are filled, is 400 `target_below_done`.
          */
         patch: operations["updateGoal"];
+        trace?: never;
+    };
+    "/v1/goals/{id}/marks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The filled circles of a count goal, oldest day first. */
+        get: operations["listGoalMarks"];
+        put?: never;
+        /**
+         * Fill one circle of a count goal.
+         * @description `day` defaults to today in the user's timezone and may not be in the
+         *     future (400 `in_future`). 400 `not_a_count_goal` if the goal has no
+         *     `targetCount`; 409 `target_reached` when every circle is filled
+         *     (raising the target is the user's call). Filling the last circle does
+         *     not mark the goal achieved. Idempotent on `id`.
+         */
+        post: operations["addGoalMark"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/goals/{id}/marks/{markId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Empty a circle. */
+        delete: operations["deleteGoalMark"];
+        options?: never;
+        head?: never;
+        /** Change or remove a filled circle's note. */
+        patch: operations["updateGoalMark"];
+        trace?: never;
+    };
+    "/v1/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The comments on one item, goal or commitment, oldest first.
+         * @description Name exactly one of `itemId`, `goalId`, `commitmentId` (else 400
+         *     `one_target`). Comments are the user's own notes: Brain never reads
+         *     them and they are never sent to a model.
+         */
+        get: operations["listComments"];
+        put?: never;
+        /** Comment on one item, goal or commitment. Idempotent on `id`. */
+        post: operations["createComment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/comments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a comment. */
+        delete: operations["deleteComment"];
+        options?: never;
+        head?: never;
+        /** Rewrite a comment. */
+        patch: operations["updateComment"];
         trace?: never;
     };
     "/v1/plan": {
@@ -346,7 +432,10 @@ export interface paths {
          *     `proposedItemId`. If `itemId` differs, the swap is recorded as a
          *     correction: it is what teaches the ranking. `day` may be yesterday,
          *     today or tomorrow (the evening planning ritual), else 400
-         *     `day_out_of_range`. The item must be open (400 `item_not_open`).
+         *     `day_out_of_range`. The item must be open (400 `item_not_open`), and
+         *     both it and `proposedItemId` must be something the plan holds: not an
+         *     idea or a note (400 `item_not_actionable`). An item whose type is not
+         *     yet known is allowed, as the plan ranks it.
          */
         put: operations["confirmDailyPlan"];
         post?: never;
@@ -622,14 +711,16 @@ export interface components {
             title: string;
             period?: components["schemas"]["Period"];
             parentId?: components["schemas"]["ULID"];
+            targetCount?: components["schemas"]["TargetCount"];
         };
         GoalUpdate: {
             title?: string;
             status?: components["schemas"]["GoalStatus"];
             period?: components["schemas"]["Period"];
             parentId?: components["schemas"]["ULID"];
+            targetCount?: components["schemas"]["TargetCount"];
             /** @description Fields to remove. A field may not be both sent and cleared. */
-            clear?: ("period" | "parentId")[];
+            clear?: ("period" | "parentId" | "targetCount")[];
         };
         Goal: {
             id: components["schemas"]["ULID"];
@@ -641,6 +732,9 @@ export interface components {
             /** @description For display, e.g. "November 2026", "Q4 2026". */
             periodText?: string;
             parentId?: components["schemas"]["ULID"];
+            targetCount?: components["schemas"]["TargetCount"];
+            /** @description Circles filled. Present exactly when `targetCount` is. */
+            doneCount?: number;
         };
         GoalList: {
             goals: components["schemas"]["Goal"][];
@@ -898,6 +992,57 @@ export interface components {
             /** @description One of the question's `options`, exactly. */
             option: string;
         };
+        /** @description Makes a goal a count goal: this many circles. A count of things, never an amount of money. */
+        TargetCount: number;
+        NewGoalMark: {
+            id: components["schemas"]["ULID"];
+            day?: components["schemas"]["Day"];
+            note?: string;
+        };
+        GoalMarkUpdate: {
+            note?: string;
+            /** @description Fields to remove. A field may not be both sent and cleared. */
+            clear?: "note"[];
+        };
+        GoalMark: {
+            id: components["schemas"]["ULID"];
+            goalId: components["schemas"]["ULID"];
+            day: components["schemas"]["Day"];
+            note?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        GoalMarkList: {
+            marks: components["schemas"]["GoalMark"][];
+        };
+        /** @description Exactly one of `itemId`, `goalId`, `commitmentId` (else 400 `one_target`). */
+        NewComment: {
+            id: components["schemas"]["ULID"];
+            itemId?: components["schemas"]["ULID"];
+            goalId?: components["schemas"]["ULID"];
+            commitmentId?: components["schemas"]["ULID"];
+            body: string;
+        };
+        CommentUpdate: {
+            body: string;
+        };
+        /** @description Exactly one of `itemId`, `goalId`, `commitmentId` is present. */
+        Comment: {
+            id: components["schemas"]["ULID"];
+            itemId?: components["schemas"]["ULID"];
+            goalId?: components["schemas"]["ULID"];
+            commitmentId?: components["schemas"]["ULID"];
+            body: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CommentList: {
+            comments: components["schemas"]["Comment"][];
+        };
     };
     responses: {
         /**
@@ -914,6 +1059,7 @@ export interface components {
         };
     };
     parameters: {
+        MarkId: components["schemas"]["ULID"];
         Id: components["schemas"]["ULID"];
         /** @description Return rows after this id. Use `nextCursor` from the previous page. */
         After: components["schemas"]["ULID"];
@@ -1214,6 +1360,222 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Goal"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listGoalMarks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalMarkList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    addGoalMark: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewGoalMark"];
+            };
+        };
+        responses: {
+            /** @description Already created with this id. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalMark"];
+                };
+            };
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalMark"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteGoalMark: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+                markId: components["parameters"]["MarkId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Emptied. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateGoalMark: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+                markId: components["parameters"]["MarkId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalMarkUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalMark"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listComments: {
+        parameters: {
+            query?: {
+                itemId?: components["schemas"]["ULID"];
+                goalId?: components["schemas"]["ULID"];
+                commitmentId?: components["schemas"]["ULID"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommentList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewComment"];
+            };
+        };
+        responses: {
+            /** @description Already created with this id. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deleteComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    updateComment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["Id"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comment"];
                 };
             };
             default: components["responses"]["Problem"];

@@ -1,12 +1,16 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import type { CaptureSource } from '../api/types';
 
-export interface OutboxEntry {
-  /** The capture's ULID, generated here. It is also the idempotency key. */
-  id: string;
+/** A capture waiting to be sent. Its ULID is generated here and is the idempotency key. */
+export interface OutboxEntry extends QueuedEntry {
   text: string;
   source: CaptureSource;
   capturedAt: string;
+}
+
+/** What every outbox entry carries, whatever it sends. The id is the idempotency key. */
+export interface QueuedEntry {
+  id: string;
   attempts: number;
   nextAttemptAt: number;
   /** `rejected`: the server refused it as invalid. Kept until the user decides. */
@@ -14,28 +18,31 @@ export interface OutboxEntry {
   lastError?: string;
 }
 
-export interface OutboxStore {
-  all(): Promise<OutboxEntry[]>;
-  put(e: OutboxEntry): Promise<void>;
+export interface OutboxStore<E extends QueuedEntry = OutboxEntry> {
+  all(): Promise<E[]>;
+  put(e: E): Promise<void>;
   delete(id: string): Promise<void>;
 }
 
-export class MemoryOutboxStore implements OutboxStore {
-  private rows = new Map<string, OutboxEntry>();
+export class MemoryOutboxStore<E extends QueuedEntry = OutboxEntry> implements OutboxStore<E> {
+  private rows = new Map<string, E>();
   async all() { return [...this.rows.values()].map((r) => ({ ...r })).sort((a, b) => a.id.localeCompare(b.id)); }
-  async put(e: OutboxEntry) { this.rows.set(e.id, { ...e }); }
+  async put(e: E) { this.rows.set(e.id, { ...e }); }
   async delete(id: string) { this.rows.delete(id); }
 }
 
-/** IndexedDB survives reloads, closed tabs and a dead network. */
-export class IdbOutboxStore implements OutboxStore {
+/**
+ * IndexedDB survives reloads, closed tabs and a dead network. One database
+ * per outbox, so adding one never needs a migration of another.
+ */
+export class IdbOutboxStore<E extends QueuedEntry = OutboxEntry> implements OutboxStore<E> {
   private db: Promise<IDBPDatabase>;
-  constructor(name = 'brain-outbox') {
+  constructor(name = 'brain-outbox', private readonly table = 'captures') {
     this.db = openDB(name, 1, {
-      upgrade(db) { db.createObjectStore('captures', { keyPath: 'id' }); },
+      upgrade(db) { db.createObjectStore(table, { keyPath: 'id' }); },
     });
   }
-  async all() { return ((await (await this.db).getAll('captures')) as OutboxEntry[]).sort((a, b) => a.id.localeCompare(b.id)); }
-  async put(e: OutboxEntry) { await (await this.db).put('captures', e); }
-  async delete(id: string) { await (await this.db).delete('captures', id); }
+  async all() { return ((await (await this.db).getAll(this.table)) as E[]).sort((a, b) => a.id.localeCompare(b.id)); }
+  async put(e: E) { await (await this.db).put(this.table, e); }
+  async delete(id: string) { await (await this.db).delete(this.table, id); }
 }

@@ -30,6 +30,7 @@ const GROUPS: { title: string; items: NavDef[] }[] = [
   ] },
   { title: 'Captured', items: [
     { to: '/inbox', label: 'Inbox', icon: 'inbox' },
+    { to: '/ideas', label: 'Ideas', icon: 'idea' },
     { to: '/items', label: 'All items', icon: 'list' },
   ] },
 ];
